@@ -22,7 +22,7 @@
 #include "stdafx.h"
 #include "Subtitle.h"
 #include "Split.h"
-#include <math.h>
+#include <cmath> // modf float, float* compatibility
 
 namespace ssf
 {
@@ -302,7 +302,7 @@ namespace ssf
 				if(direction == L"fwbw" || direction == L"bwfw") t *= 2;
 
 				float n;
-				t = modf(t, &n);
+				t = modf(t, &n); // float, float* is unknown for math.h, use cmath instead
 
 				if(direction == L"bw" 
 				|| direction == L"fwbw" && ((int)n & 1)

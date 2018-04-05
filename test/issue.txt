@@ -1,0 +1,89 @@
+==============================================================
+issue 1:
+test file: 1.ass
+incorrect pos of "Ñ£" and "¤·" of line 2 of 1.ass after seeking back (fixed)
+incorrect result of "¤¢" at line "¤¢{\kf35}¤Î{\kf62}øB{\kf24}¤Ï{\kf49}¤Þ{\kf49}¤À{\kf49}¤¦{\kf27}¤Þ{\kf38}¤¯{\kf33}ïw{\kf41}¤Ù{\kf35}¤Ê{\kf146}¤¤{\kf48}¤±{\kf117}¤É" (fixed)
+==============================================================
+issue 2: gaussian blur unlike origin vsfilter (fixed)
+==============================================================
+issue 3: crashed with 5.ass(fixed)
+==============================================================
+issue 4: incorrect result with 6.ass(fixed)
+==============================================================
+issue 5: incorrect \be effect with 7.ass.(fixed)
+==============================================================
+issue 6: crashed with 8.ass.(fixed)
+==============================================================
+issue 7: incorrect result, missing shapes produced by \clip, with 9.ass; introduced since Commit 43207694492d3793a47432b8e24785bca594b9e7(including it)
+more: see issue 11.
+(fixed)
+==============================================================
+issue 8: incorrect result, false text layout, with 10.ass; introduced since Commit 43207694492d3793a47432b8e24785bca594b9e7 (including it)(fixed)
+==============================================================
+issue 9: crash. Steps to crash: 1. play any simple subtitle until a line of sub appear with cache options bigger than 0; 2.pause the player and set cache options down to 0.(fixed)
+==============================================================
+issue 10: incorrect result with 11.ass. \move dosenot work with out-of-range position and \q2 tag.
+Edit1: indeed, it is the 4 params \move tag form trigger the bug. \q2 tag has nothing to do with this issue.
+(fixed)
+==============================================================
+issue 11: incorrect result, improper cliper position with 12.ass.
+more: on videos with 720 x 400 resolution, the result is correct, but on 1280 x 720, the result is wrong. Turn off compiler option /arch:SSE2, both resolutions above get the right result. It also applies to Issue 7. Maybe /arch:SSE2 option affects some internal floating point caculation such that an overflow occur. (fixed)
+==============================================================
+issue 12: lags when scripts have blur tags, due to the complex gaussian table generation.(fixed)
+==============================================================
+issue 13: crash with 13.ass. Introduced since Commit:49399231bb7a8167d9451ccc1e2ef076fa7b8195.(fixed)
+==============================================================
+issue 14: incorrect result, random corruption at subtitle's right border with 14.ass. Introduced before Commit:f5c96b88a74ef156cef7c4bdb5bc512ec52f8a58
+.(fixed)
+==============================================================
+issue 15: incorrect result, fax/fay effects not working with 15.ass. Introduced before Commit:ce0314dce9552f62ed07b51ae5d11010e0bfb65e.(fixed)
+==============================================================
+issue 16: crashed with (malformed) 16.ass while stock vsfilter don't. (fixed)
+==============================================================
+issue 17: failed to display vobsub format subtitle in color output other than rgb.(fixed)
+==============================================================
+issue 18: YUY2 output not working right.(fixed)
+==============================================================
+issue 19: Corruption with 17.ass. Using it with a 1024 x 576 video, the corruption lies between "omoi " and "ka".(fixed)
+==============================================================
+issue 20: Incorrect result when seeking with 18.ass.  Using it with a 1024 x 576 video, pause and seek to frame 280, the result subpic is corresponding to another time.(fixed)
+==============================================================
+issue 21: crash with 19.ass because of uninitiated point. Whitespace in the script trigger the bug. Introduced in Commit:719aa9a7fbf614d3911ecfa591632e01fd11aafb. (fixed)
+==============================================================
+issue 22: subtitle line duplication with 20.ass embedded. Introduced in Commit:c428d33463893e4c600ce00f7f4dd0a9bcbf63ba.(fixed)
+==============================================================
+issue 23: poor performance for unsorted embedded ass subtitles. With such subtitles, rasterizer::Draw function is called far more frequently then both external subtitle and sorted embedded subtitle. Steps to reproduce it: 
+	choise 1: mix 21.ass with any video into .mkv, play it and watch OSD info. It will show that Cache LV 1 gets unreasonable high query count. 
+	choise 2: mix 22.ass with any video into .mkv, play it and watch OSD info. It will show that total query count of Cache LV 1 is 4 times, while using the subtitle as external subtitle or sorted before mixing, Cache LV 1 gets queried 3 times totally. (fixed)
+==============================================================
+issue 24: incorrect color with P010/P016. (fixed)
+==============================================================
+issue 25: \t tags not working, e.g. in 23.ass.(fixed)
+==============================================================
+issue 26: \frx and \fry rotations are reversed, associated script: 24.ass. Introduced in Commit:844c17a1664ebe874a760fc3186c719445e1c5bf.(fixed)
+==============================================================
+issue 27: \be behaviour changed. Associated script: 7.ass. Introduced in Commit:1e4fce20f3fe36e3a6c4a8369ef1c96a796f7646
+. (fixed)
+==============================================================
+issue 28: Semi-transparent box visable. Associated script: 25.ass. Associated video clip: 25.mkv.(fixed)
+==============================================================
+issue 29: incorrect with transform effect. Associated script: 26.ass.(direction of shadow reversed)(Introduced in Commit:eaf70dbe6c3756fd57788c9bb40686ddffb6e178)(fixed)
+==============================================================
+issue 30: Invalid lines containing unclosed parentheses cause xy-VSFilter tothrow an exception and crash. Associated script: 27.ass.(fixed)
+==============================================================
+issue 31: \iclip animation fails. Associated script: 28.ass.(fixed)
+==============================================================
+issue 32: Vector drawing fails if used alone inside text. Associated script: 29.ass.(Introduced in Commit:1fe0ea63406157ecf68e27323f5f7e651367b029)(fixed)
+==============================================================
+issue 33: Multiple instances of simple fade \fad(t1,t2) on one line break 3.0.0.2 animation detection. Associated script: 30.ass.(Introduced in Commit:139b6d9ae7b0ab49bb66281864116251c57d70cc)(fixed)
+==============================================================
+issue 34: purple fringing on some VOBSUBs. Associated script: 31.sub/31.idx. (Introduced in Commit:faa1a23abcc2e94d0eef72a4225c2f5a75aa65f5)(fixed)
+==============================================================
+issue 35: \h tag with GB2312 encoded non-unicode fonts produces ugly result. Associated script: 32.ass. (*fixed*)
+==============================================================
+issue 36: Corruption Bug. Associated script: 33.ass.(fixed)
+==============================================================
+issue 37: Codepage issue. Associated script: 34.ass.(fixed)
+==============================================================
+issue 38: Corruption when there are actually NO border but draw border routine still runs. Associated script: 35.ass.(fixed)
+==============================================================

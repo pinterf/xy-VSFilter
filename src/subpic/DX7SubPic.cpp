@@ -22,6 +22,8 @@
 #include "stdafx.h"
 #include <ddraw.h>
 #include <d3d.h>
+
+#if(DIRECT3D_VERSION < 0x0800)
 #include "DX7SubPic.h"
 
 //
@@ -302,3 +304,4 @@ bool CDX7SubPicAllocator::Alloc(bool fStatic, ISubPic** ppSubPic)
 
 	return true;
 }
+#endif

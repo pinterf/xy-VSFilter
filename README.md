@@ -1,5 +1,6 @@
 # xy-VSFilter
 - Origin of mod source: https://github.com/Cyberbeing/xy-VSFilter/releases/tag/3.0.0.306
+- This project: https://github.com/pinterf/xy-VSFilter/
 - Forum: https://forum.doom9.org/showthread.php?t=168282
 - Rebuilt with Visual Studio 2017
 - Avisynth+ headers
@@ -7,4 +8,6 @@
 - Conversion to and from P010 and P016 with SSE2 support
 - Still doesn't work in any MT mode (I think): automatically registers itself as MT_SERIALIZED to prevent troubles
 - MaskSub: new pixel_type (default: "RGB32") parameter. Can be set to YUV420P10 or YUV420P16
+- Versioning: 3.0.0 prefix if kept, build number goes from 400 and up for my mod manually in src/filters/transform/vsfilter/version_in.h
+- All credits to the previous authors.
 xy-VSFilter

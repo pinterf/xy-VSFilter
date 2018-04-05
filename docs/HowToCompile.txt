@@ -1,3 +1,5 @@
+PF2018 marked comments: when tried to arrange the original 3.0.0.306 project under Visual Studio 2017
+
 Because Visual Studio becomes a turtle when there are many little projects, I didn't set up dependencies between them and didn't put them all into one workspace per application. These are more or less the base of everything, build them in this order first:
 1. deccs
 2. dsutil
@@ -8,8 +10,28 @@ Because Visual Studio becomes a turtle when there are many little projects, I di
 
 Required SDKs:
 - DirectX 9 SDK (you may need to add "Debug Unicode" and "Release Unicode" configs to the project file of the directshow baseclasses)
+**PF2018**: I'm using June 2010 version
 - Platform SDK
-- Windows Media Format SDK 9
+- Windows Media Format SDK 9 (**PF2018**:not needed or I had it already)
+
+**PF2018-comment start**
+When you have the zipped 3.0.0.306 source:
+1.) Unzip source
+2.) If YASM.exe is not in path e.g. in c:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\bin\
+    Edit src\YASM.PROP, CommandLineTemplate 
+    from
+      <CommandLineTemplate>yasm -X vc -f $(Platform) [Debug] [Defines] [IncludePaths] -o "$(IntDir)%(Filename).obj" "%(FullPath)"</CommandLineTemplate>
+    to 
+      <CommandLineTemplate>"c:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\bin\"yasm -X vc -f $(Platform) [Debug] [Defines] [IncludePaths] -o "$(IntDir)%(Filename).obj" "%(FullPath)"</CommandLineTemplate>
+3.)
+for VS2017 the template macro $IncludeFiles should be changed.
+Since afx.h is now in ucrt directory. Edit <IncludePath>....</IncludePath> section in subtitles.vcxproj 
+to include: $(VCToolsInstallDir)include;$(VCToolsInstallDir)atlmfc\include
+and $(VCToolsInstallDir)PlatformSDK\include;
+and $(UniversalCRT_IncludePath);
+For now it look like:  
+<IncludePath>$(WindowsSdkDir)include;$(VCToolsInstallDir)include;$(VCToolsInstallDir)atlmfc\include;$(FrameworkSDKDir)\include;$(VCToolsInstallDir)PlatformSDK\include;$(UniversalCRT_IncludePath);$(SolutionDir)src\filters\transform\vsfilter;$(SolutionDir)src\thirdparty\log4cplus\include\;$(SolutionDir)src\filters\BaseClasses;$(SolutionDir)src\thirdparty\boost_lib\;$(SolutionDir)include\;$(SolutionDir)include\unrar\;$(SolutionDir)src\thirdparty\</IncludePath>
+**PF2018-comment end**
 
 It is recommended that you add DX9's include and lib paths to Visual Studio before the others:
 
@@ -22,6 +44,69 @@ It is recommended that you add DX9's include and lib paths to Visual Studio befo
 <DXSDK>\lib
 ...
 
+**PF2018-comment start**
+Changes done on the original project to have the Avisynth filter compiled under VS2017:
+
+1.) Project opened and got converted. Choose Windows SDK 8.1 and v141 toolset
+
+2.) Where is DXSDK{$DXSDK_Dir}
+subpic needs it for example: ${DXSDK_DIR}Samples\C++\DirectShow\BaseClasses\;${DXSDK_DIR}Include\
+
+3.) Troubles: dx7subpic.cpp and h:
+They use IDirect3DDevice7, which is _NOT_ included d3d.h, 
+because DIRECT3D_VERSION is defined for 0x0900, because 8.1 platform defines it. C:\Program Files (x86)\Windows Kits\8.1\Include\shared\d3d9types.h(16):#define DIRECT3D_VERSION         0x0900
+// include this file content only if compiling for <=DX7 interfaces
+#if(DIRECT3D_VERSION < 0x0800)
+-> Mod dx7SubPic.h with the same #if(DIRECT3D_VERSION < 0x0800)
+
+4.) for VS2017 the template macro $IncludeFiles should be changed.
+Since afx.h is now in ucrt directory. Edit <IncludePath>....</IncludePath> section in subtitles.vcxproj 
+to include: $(VCToolsInstallDir)include;$(VCToolsInstallDir)atlmfc\include
+and $(VCToolsInstallDir)PlatformSDK\include;
+and $(UniversalCRT_IncludePath);
+For now it look like:  
+<IncludePath>$(WindowsSdkDir)include;$(VCToolsInstallDir)include;$(VCToolsInstallDir)atlmfc\include;$(FrameworkSDKDir)\include;$(VCToolsInstallDir)PlatformSDK\include;$(UniversalCRT_IncludePath);$(SolutionDir)src\filters\transform\vsfilter;$(SolutionDir)src\thirdparty\log4cplus\include\;$(SolutionDir)src\filters\BaseClasses;$(SolutionDir)src\thirdparty\boost_lib\;$(SolutionDir)include\;$(SolutionDir)include\unrar\;$(SolutionDir)src\thirdparty\</IncludePath>
+
+5.) YASM
+When yasm.exe is not is the search path, or has another name e.g. vsyasm.exe, edit YASM.PROPS in the src directory, put the full path
+      <CommandLineTemplate>"c:\Program Files (x86)\Microsoft Visual Studio\2017\Community\VC\"yasm -X vc [Platform] [Debug] [Defines] [IncludePaths] -o "$(IntDir)%(Filename).obj" "%(FullPath)"</CommandLineTemplate>
+
+6.) "System" project: 
+asm files were not compiled. Project-RightClick-Build Dependencies-Build Customization: check YASM checkbox
+
+7.) Media Format SDK: 9 not found. Not needed. Seems that in VS2017 it's in some SDK somewhere.
+9.5 exists
+11 exists: 
+https://msdn.microsoft.com/hu-hu/library/windows/desktop/dd757738(v=vs.85).aspx
+https://developer.microsoft.com/en-us/windows/downloads
+??? Where?
+In subpic project wincodec.h references DXGI_JPEG_AC_HUFFMAN_TABLE
+MSDN says it is for DX10-11-12. But we have DX9 installed.??? todo
+
+8.) Let's disable 2.0 and 2.5 Avisynth interface and use 2.6 instead
+We put latest avisynth.h from avs+ project to: include/avisynth/
+Copy from Avisynth+ project:
+avisynth.h
+avs/config.h
+avs/capi.h
+avs/types.h
+avs/cpuid.h
+avs/capi.h
+
+Avisynth1 and Avisynth25 namespace were ifdef'd out in plugins.cpp
+Added: Avisynth26 namespace to vsfilter plugins.cpp
+In avisynth.h I had to replace <> with "" around there include files:
+#include "avs/config.h"
+#include "avs/capi.h"
+#include "avs/types.h"
+#include "avs/cpuid.h"
+#include "avs/capi.h"
+
+9.) Modify avs filter part for supporting native 10 and 16 bit high bit depth
+
+**PF2018-comment end**
+
+
 Other external header files are included directly, modify the path in the sources if your installation differs. (but don't COMMIT it to the SVN!)
 
 Debug builds use dynamic, Release builds use static linking to standard C/C++ and MFC libs. Don't forget to change this in the baseclasses. Also IMPORTANT: add winmm.lib to the baseclasses or else you will get a few unresolved externals later.
@@ -29,4 +114,5 @@ Debug builds use dynamic, Release builds use static linking to standard C/C++ an
 Versioning:
 Run build_vsfilter.sh under Git Bash (http://code.google.com/p/msysgit/).
 Or, edit src/filters/transform/vsfilter/version_in.h (see @build_vsfilter.sh) with correct version info by hand or by whatever, and compile the solution as usual.
+
 ==================================================================================

@@ -211,8 +211,11 @@ public:
                 m_simple_provider = NULL;
                 return(false);
             }
-            hr = XySetSize(SIZE_ORIGINAL_VIDEO, size);
+#if 0
+            hr = XySetSize(SIZE_ORIGINAL_VIDEO, size); // E_INVALID_ARG
             CHECK_N_LOG(hr, "Failed to set option");
+#endif
+            m_xy_size_opt[SIZE_ORIGINAL_VIDEO] = size; // PF20180411 readonly property, set here
         }
 
         if(m_SubPicProviderId != (DWORD_PTR)(ISubPicProvider*)m_pSubPicProvider)

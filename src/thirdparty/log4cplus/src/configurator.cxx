@@ -18,6 +18,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <functional>
 #include <log4cplus/configurator.h>
 #include <log4cplus/hierarchylocker.h>
 #include <log4cplus/helpers/loglog.h>
@@ -49,7 +50,6 @@
 #include <algorithm>
 #include <vector>
 #include <cstdlib>
-#include <functional>
 
 
 namespace log4cplus
@@ -632,7 +632,7 @@ class ConfigurationWatchDogThread
 public:
     ConfigurationWatchDogThread(const tstring& file, unsigned int millis)
         : PropertyConfigurator(file)
-        , waitMillis(waitMillis < 1000 ? 1000 : millis)
+        , waitMillis(millis < 1000 ? 1000 : millis)
         , shouldTerminate(false)
         , lock(NULL)
     { }

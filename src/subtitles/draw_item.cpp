@@ -499,8 +499,9 @@ void DecideDrawMethod( CompositeDrawItemListList& compDrawItemListList, XyRectEx
             if (!*not_lowest1)
             {
 #if 0
-              // PF 20180411 temporarily disable use_addition=true
-              // Reason: Rasterizer::AdditionDraw it simply errors out: "planar not supported"
+              // Remark of a post 3.1.0.746 modification
+              //  PF 20180411 temporarily disable use_addition=true
+              //  Reason: Rasterizer::AdditionDraw it simply errors out: "planar not supported"
                 if (comp_draw_item.shadow ) comp_draw_item.shadow->use_addition_draw  = true;
                 int n = !!comp_draw_item.body + !!comp_draw_item.outline + !!comp_draw_item.shadow;
                 if (n==1 || 

@@ -68,8 +68,13 @@ protected:
 
     bool m_fLazyInit;
 public:
-    CFilter() : CUnknown(NAME("CFilter"), NULL), m_fps(-1), m_SubPicProviderId(0), m_fLazyInit(false)
+    CFilter() 
+        : CUnknown(NAME("CFilter"), NULL)
+        , CDirectVobSub(DirectVobFilterOptions, &m_csSubLock)
+        , m_fps(-1), m_SubPicProviderId(0), m_fLazyInit(false)
     {
+        m_xy_str_opt[STRING_NAME] = L"CFilter";
+
         //fix me: should not do init here
         CacheManager::GetPathDataMruCache()->SetMaxItemNum(m_xy_int_opt[INT_PATH_DATA_CACHE_MAX_ITEM_NUM]);
         CacheManager::GetScanLineData2MruCache()->SetMaxItemNum(m_xy_int_opt[INT_SCAN_LINE_DATA_CACHE_MAX_ITEM_NUM]);
@@ -81,7 +86,7 @@ public:
 
         CacheManager::GetClipperAlphaMaskMruCache()->SetMaxItemNum(m_xy_int_opt[INT_CLIPPER_MRU_CACHE_ITEM_NUM]);
         CacheManager::GetTextInfoCache()->SetMaxItemNum(m_xy_int_opt[INT_TEXT_INFO_CACHE_ITEM_NUM]);
-        CacheManager::GetAssTagListMruCache()->SetMaxItemNum(m_xy_int_opt[INT_ASS_TAG_LIST_CACHE_ITEM_NUM]);
+        //CacheManager::GetAssTagListMruCache()->SetMaxItemNum(m_xy_int_opt[INT_ASS_TAG_LIST_CACHE_ITEM_NUM]);
 
         SubpixelPositionControler::GetGlobalControler().SetSubpixelLevel( static_cast<SubpixelPositionControler::SUBPIXEL_LEVEL>(m_xy_int_opt[INT_SUBPIXEL_POS_LEVEL]) );
 
@@ -99,7 +104,7 @@ public:
         
         return QI(IDirectVobSub)
             QI(IDirectVobSub2)
-            QI(IDirectVobSubXy)
+            QI(IXyOptions)
             QI(IFilterVersion)
             __super::NonDelegatingQueryInterface(riid, ppv);
     }
@@ -181,6 +186,7 @@ public:
 
     bool Render(SubPicDesc& dst, REFERENCE_TIME rt, float fps)
     {
+        HRESULT hr = NOERROR;
         if(!m_pSubPicProvider)
             return(false);
 
@@ -194,13 +200,16 @@ public:
 
           if(!m_simple_provider)
           {
-            HRESULT hr;
             if(!(m_simple_provider = new SimpleSubPicProvider2(dst.type, size, size, CRect(CPoint(0,0), size), this, &hr)) || FAILED(hr))
             {
               m_simple_provider = NULL;
               return(false);
             }
-            XySetSize(SIZE_ORIGINAL_VIDEO, size);
+#if 0
+            hr = XySetSize(SIZE_ORIGINAL_VIDEO, size); // E_INVALID_ARG
+            CHECK_N_LOG(hr, "Failed to set option");
+#endif
+            m_xy_size_opt[SIZE_ORIGINAL_VIDEO] = size; // PF20180411 readonly property, set here
           }
 
           if(m_SubPicProviderId != (DWORD_PTR)(ISubPicProvider*)m_pSubPicProvider)
@@ -214,7 +223,7 @@ public:
               CRenderedTextSubtitle* pRTS = dynamic_cast<CRenderedTextSubtitle*>((ISubPicProvider*)m_pSubPicProvider);
               playres = pRTS->m_dstScreenSize;
             }
-            XySetSize(SIZE_ASS_PLAY_RESOLUTION, playres);
+            m_xy_size_opt[SIZE_ASS_PLAY_RESOLUTION] = playres;
 
             m_simple_provider->SetSubPicProvider(m_pSubPicProvider);
             m_SubPicProviderId = (DWORD_PTR)(ISubPicProvider*)m_pSubPicProvider;
@@ -394,7 +403,7 @@ public:
                 dst.h = fa->src.h;
                 dst.bpp = 32;
                 dst.pitch = fa->src.pitch;
-                dst.bits = (LPVOID)fa->src.data;
+                dst.bits = (BYTE*)fa->src.data;
 
                 Render(dst, 10000i64 * fa->pfsi->lSourceFrameMS, (float)1000 / fa->pfsi->lMicrosecsPerFrame);
 
@@ -931,7 +940,7 @@ public:
                 dst.w = vi.width;
                 dst.h = vi.height;
                 dst.pitch = frame->GetPitch();
-                dst.bits = (void*)frame->GetWritePtr();
+                dst.bits = (BYTE*)frame->GetWritePtr();
                 dst.bpp = vi.BitsPerPixel();
                 dst.type =
                     vi.IsRGB32() ? (env->GetVar("RGBA").AsBool() ? MSP_RGBA : MSP_RGB32) :
@@ -1051,7 +1060,7 @@ public:
                 dst.h = vi.height;
                 dst.pitch = frame->GetPitch();
                 dst.pitchUV = frame->GetPitch(PLANAR_U);
-                dst.bits = (void*)frame->GetWritePtr();
+                dst.bits = (BYTE*)frame->GetWritePtr();
                 dst.bitsU = frame->GetWritePtr(PLANAR_U);
                 dst.bitsV = frame->GetWritePtr(PLANAR_V);
                 dst.bpp = dst.pitch / dst.w * 8; //vi.BitsPerPixel();
@@ -1485,7 +1494,7 @@ public:
             // Fill dst pointers
             dst.pitch = pitch;
             dst.pitchUV = pitch; // n/a? // ? in P010 no separate UV pointers
-            dst.bits = (void*)pdst_save;
+            dst.bits = pdst_save;
             dst.bitsU = pdst_save + pitch * vi.height; // ? in P010 no separate pointers
             dst.bitsV = pdst_save + pitch * vi.height;
           }
@@ -1495,7 +1504,7 @@ public:
 
             dst.pitch = frame->GetPitch();
             dst.pitchUV = frame->GetPitch(PLANAR_U);
-            dst.bits = (void*)frame->GetWritePtr();
+            dst.bits = frame->GetWritePtr();
             dst.bitsU = frame->GetWritePtr(PLANAR_U);
             dst.bitsV = frame->GetWritePtr(PLANAR_V);
           }

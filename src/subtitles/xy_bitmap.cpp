@@ -4,6 +4,37 @@
 #include "../SubPic/ISubPic.h"
 #include "../subpic/color_conv_table.h"
 
+#if ENABLE_XY_LOG_SUB_RENDER_FRAME
+#  define TRACE_SUB_RENDER_FRAME(msg) XY_LOG_TRACE(msg)
+#else
+#  define TRACE_SUB_RENDER_FRAME(msg)
+#endif
+
+static inline void FlipAlphaValueSSE(BYTE *data, int w)
+{
+    int w00 = w&~3;
+    __m128i mask = _mm_set1_epi32(0xff000000);
+    DWORD *data_w = reinterpret_cast<DWORD*>(data);
+    for (int i=0;i<w00;i+=4)
+    {
+        __m128i argb = _mm_loadu_si128(reinterpret_cast<const __m128i*>(data_w+i));
+        argb = _mm_xor_si128(argb, mask);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(data_w+i), argb);
+    }
+    for (int i=w00;i<w;i++)
+    {
+        *(data_w+i) = *(data_w+i) ^ 0xFF000000;
+    }
+}
+static inline void FlipAlphaValueC(BYTE *data, int w)
+{
+    DWORD *data_w = reinterpret_cast<DWORD*>(data);
+    for (int i=0;i<w;i++)
+    {
+        *(data_w+i) = *(data_w+i) ^ 0xFF000000;
+    }
+}
+
 XyBitmap::~XyBitmap()
 {
     xy_free(bits);
@@ -11,7 +42,7 @@ XyBitmap::~XyBitmap()
 
 XyBitmap * XyBitmap::CreateBitmap( const CRect& target_rect, MemLayout layout )
 {
-    XyBitmap *result = new XyBitmap();
+    XyBitmap *result = DEBUG_NEW XyBitmap();
     if (result==NULL)
     {
         ASSERT(0);
@@ -21,7 +52,7 @@ XyBitmap * XyBitmap::CreateBitmap( const CRect& target_rect, MemLayout layout )
     result->x = target_rect.left;
     result->y = target_rect.top;
     result->w = target_rect.Width();
-    result->h = target_rect.Height();    
+    result->h = target_rect.Height();
     int w16 = (result->w + 15) & ~15;
         
     switch (result->type)
@@ -37,7 +68,7 @@ XyBitmap * XyBitmap::CreateBitmap( const CRect& target_rect, MemLayout layout )
         result->plans[0] = reinterpret_cast<BYTE*>(result->bits);
         result->plans[1] = result->plans[0] + result->pitch * result->h;
         result->plans[2] = result->plans[1] + result->pitch * result->h;
-        result->plans[3] = result->plans[2] + result->pitch * result->h;        
+        result->plans[3] = result->plans[2] + result->pitch * result->h;
         break;
     default:
         ASSERT(0);
@@ -165,6 +196,63 @@ void XyBitmap::AlphaBltPlannar( SubPicDesc& spd, POINT pos, SIZE size, const XyP
     }
 }
 
+void XyBitmap::FlipAlphaValue( LPVOID pixels, int w, int h, int pitch )
+{
+    ASSERT(pixels);
+
+    if (w<=0 || h<=0)
+    {
+        return;
+    }
+
+    BYTE* top = static_cast<BYTE*>(pixels);
+    BYTE* bottom = top + pitch*h;
+
+    bool fSSE2 = !!(g_cpuid.m_flags & CCpuID::sse2);
+    if ( fSSE2 )
+    {
+        for(; top < bottom ; top += pitch)
+        {
+            FlipAlphaValueSSE(top, w);
+        }
+    }
+    else
+    {
+        for(; top < bottom ; top += pitch)
+        {
+            FlipAlphaValueC(top, w);
+        }
+    }
+
+    return;
+}
+
+void XyBitmap::BltPack( SubPicDesc& spd, POINT pos, SIZE size, LPCVOID pixels, int pitch )
+{
+    ASSERT( spd.type!=MSP_AYUV_PLANAR );
+    CRect r(0, 0, spd.w, spd.h);
+
+    int x = pos.x;
+    int y = pos.y;
+    int w = size.cx;
+    int h = size.cy;
+    int x_src = 0, y_src = 0;
+
+    if(x < r.left) {x_src = r.left-x; w -= r.left-x; x = r.left;}
+    if(y < r.top) {y_src = r.top-y; h -= r.top-y; y = r.top;}
+    if(x+w > r.right) w = r.right-x;
+    if(y+h > r.bottom) h = r.bottom-y;
+
+    const BYTE* src = reinterpret_cast<const BYTE*>(pixels) + y_src*pitch + x_src*4;
+
+    BYTE* dst = reinterpret_cast<BYTE*>(spd.bits) + spd.pitch * y + ((x*spd.bpp)>>3);
+
+    for(int i=0;i<h;i++, src += pitch, dst += spd.pitch)
+    {
+        memcpy(dst, src, w*4);
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////
 //
 // SubRenderFrame
@@ -189,6 +277,7 @@ STDMETHODIMP XySubRenderFrame::NonDelegatingQueryInterface( REFIID riid, void** 
 
 STDMETHODIMP XySubRenderFrame::GetOutputRect( RECT *outputRect )
 {
+    TRACE_SUB_RENDER_FRAME(outputRect<<" "<<m_output_rect);
     if (!outputRect)
     {
         return E_POINTER;
@@ -199,6 +288,7 @@ STDMETHODIMP XySubRenderFrame::GetOutputRect( RECT *outputRect )
 
 STDMETHODIMP XySubRenderFrame::GetClipRect( RECT *clipRect )
 {
+    TRACE_SUB_RENDER_FRAME(clipRect<<" "<<m_clip_rect);
     if (!clipRect)
     {
         return E_POINTER;
@@ -209,6 +299,7 @@ STDMETHODIMP XySubRenderFrame::GetClipRect( RECT *clipRect )
 
 STDMETHODIMP XySubRenderFrame::GetXyColorSpace( int *xyColorSpace )
 {
+    TRACE_SUB_RENDER_FRAME(xyColorSpace<<" "<<m_xy_color_space);
     if (!xyColorSpace)
     {
         return E_POINTER;
@@ -219,6 +310,7 @@ STDMETHODIMP XySubRenderFrame::GetXyColorSpace( int *xyColorSpace )
 
 STDMETHODIMP XySubRenderFrame::GetBitmapCount( int *count )
 {
+    TRACE_SUB_RENDER_FRAME(count<<" "<<m_bitmaps.GetCount());
     if (!count)
     {
         return E_POINTER;
@@ -240,8 +332,8 @@ STDMETHODIMP XySubRenderFrame::GetBitmap( int index, ULONGLONG *id, POINT *posit
     const XyBitmap& bitmap = *(m_bitmaps.GetAt(index));
     if (position)
     {
-        position->x = bitmap.x;
-        position->y = bitmap.y;
+        position->x = bitmap.x + m_output_rect.left;
+        position->y = bitmap.y + m_output_rect.top;
     }
     if (size)
     {
@@ -256,6 +348,10 @@ STDMETHODIMP XySubRenderFrame::GetBitmap( int index, ULONGLONG *id, POINT *posit
     {
         *pitch = bitmap.pitch;
     }
+    TRACE_SUB_RENDER_FRAME(index<<" id: "<<m_bitmap_ids.GetAt(index)
+        <<" dirty_rect: x "<<bitmap.x+m_output_rect.left<<", y "<<bitmap.y + m_output_rect.top
+        <<", w "<<bitmap.w<<", h "<<bitmap.h
+        <<" pitch:"<<bitmap.pitch<<" pixels:"<<(void*)bitmap.plans[0]);
     return S_OK;
 }
 
@@ -274,8 +370,21 @@ STDMETHODIMP XySubRenderFrame::GetBitmapExtra( int index, LPVOID extra_info )
         output->plans[1] = bitmap.plans[1];
         output->plans[2] = bitmap.plans[2];
         output->plans[3] = bitmap.plans[3];
+
+        TRACE_SUB_RENDER_FRAME(index<<" "<<(void*)bitmap.plans[0]<<" "
+            <<(void*)bitmap.plans[1]<<" "
+            <<(void*)bitmap.plans[2]<<" "
+            <<(void*)bitmap.plans[3]);
     }
     return S_OK;
+}
+
+void XySubRenderFrame::MoveTo( int x, int y )
+{
+    m_left = x;
+    m_top  = y;
+    m_output_rect.MoveToXY(x, y);
+    m_clip_rect.MoveToXY(x, y);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -316,6 +425,25 @@ HRESULT XySubRenderFrameCreater::SetColorSpace( XyColorSpace color_space )
     return S_OK;
 }
 
+HRESULT XySubRenderFrameCreater::SetVsfilterCompactRgbCorrection( bool value )
+{
+    if (m_vsfilter_compact_rgb_correction != value) {
+        m_vsfilter_compact_rgb_correction = value;
+        return S_OK;
+    }
+    return S_FALSE;
+}
+
+HRESULT XySubRenderFrameCreater::SetRgbOutputTvLevel( bool value )
+{
+    if (m_rgb_output_tv_level!=value)
+    {
+        m_rgb_output_tv_level = value;
+        return S_OK;
+    }
+    return S_FALSE;
+}
+
 HRESULT XySubRenderFrameCreater::GetOutputRect( RECT *output_rect )
 {
     if (!output_rect)
@@ -348,7 +476,7 @@ HRESULT XySubRenderFrameCreater::GetColorSpace( XyColorSpace *color_space )
 
 XySubRenderFrame* XySubRenderFrameCreater::NewXySubRenderFrame( UINT bitmap_count )
 {
-    XySubRenderFrame *result = new XySubRenderFrame();
+    XySubRenderFrame *result = DEBUG_NEW XySubRenderFrame();
     ASSERT(result);
     result->m_output_rect = m_output_rect;
     result->m_clip_rect = m_clip_rect;
@@ -375,9 +503,34 @@ DWORD XySubRenderFrameCreater::TransColor( DWORD argb )
         return ColorConvTable::Argb2Auyv(argb);
         break;
     case XY_CS_ARGB:
-        return argb;
+    case XY_CS_ARGB_F:
+        if (m_vsfilter_compact_rgb_correction) {
+            return ColorConvTable::VSFilterCompactCorretion(argb, m_rgb_output_tv_level);
+        }
+        else
+        {
+            if (!m_rgb_output_tv_level)
+            {
+                return argb;
+            }
+            else
+            {
+                return ColorConvTable::RGB_PC_TO_TV(argb);
+            }
+        }
         break;
     }
     return argb;
 }
+
+bool XySubRenderFrameCreater::GetVsfilterCompactRgbCorrection()
+{
+    return m_vsfilter_compact_rgb_correction;
+}
+
+bool XySubRenderFrameCreater::GetRgbOutputTvLevel()
+{
+    return m_rgb_output_tv_level;
+}
+
 

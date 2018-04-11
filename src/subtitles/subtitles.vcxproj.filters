@@ -99,6 +99,15 @@
     <ClCompile Include="TextFile.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="hdmv_subtitle_provider.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="xy_pool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="StdioFile64.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="CCDecoder.h">
@@ -194,5 +203,17 @@
     <ClInclude Include="xy_widen_regoin.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-  </ItemGroup>
+    <ClInclude Include="hdmv_subtitle_provider.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="xy_pool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="xy_int_map.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="StdioFile64.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+ 
 </Project>

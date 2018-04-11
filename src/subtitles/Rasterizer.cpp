@@ -29,7 +29,7 @@
 #include "xy_logger.h"
 #include <boost/flyweight/key_value.hpp>
 #include "xy_bitmap.h"
-#include "xy_widen_regoin.h"
+#include "xy_widen_region.h"
 
 #ifndef _MAX	/* avoid collision with common (nonconforming) macros */
 #define _MAX	(std::max)
@@ -184,24 +184,6 @@ struct GaussianFilterKey
     const double& operator()(const GaussianFilter& x)const
     {
         return x.sigma;
-    }
-};
-
-struct ass_tmp_buf
-{
-public:
-    ass_tmp_buf(size_t size);
-    ass_tmp_buf(const ass_tmp_buf& buf);
-    ~ass_tmp_buf();
-    size_t size;
-    unsigned *tmp;
-};
-
-struct ass_tmp_buf_get_size
-{
-    const size_t& operator()(const ass_tmp_buf& buf)const
-    {                                              
-        return buf.size;
     }
 };
 
@@ -381,23 +363,6 @@ int ass_synth_priv::generate_tables(double sigma)
         }        
     }
     return 0;
-}
-
-ass_tmp_buf::ass_tmp_buf(size_t size)
-{
-    tmp = (unsigned *)malloc(size * sizeof(unsigned));
-    this->size = size;
-}
-
-ass_tmp_buf::ass_tmp_buf(const ass_tmp_buf& buf)
-    :size(buf.size)
-{
-    tmp = (unsigned *)malloc(size * sizeof(unsigned));
-}
-
-ass_tmp_buf::~ass_tmp_buf()
-{
-    free(tmp);
 }
 
 /*
@@ -1030,7 +995,7 @@ bool Rasterizer::OldFixedPointBlur(const Overlay& input_overlay, float be_streng
         }
     }
 
-    ass_tmp_buf tmp_buf( max((output_overlay->mOverlayPitch+1)*(output_overlay->mOverlayHeight+1),0) );        
+    ::boost::shared_array<unsigned> tmp_buf( DEBUG_NEW unsigned[max((output_overlay->mOverlayPitch+1)*(output_overlay->mOverlayHeight+1),0)] );
     //flyweight<key_value<int, ass_tmp_buf, ass_tmp_buf_get_size>, no_locking> tmp_buf((overlay->mOverlayWidth+1)*(overlay->mOverlayPitch+1));
     // Do some gaussian blur magic    
     if ( gaussian_blur_strength > GAUSSIAN_BLUR_THREHOLD )
@@ -1046,7 +1011,7 @@ bool Rasterizer::OldFixedPointBlur(const Overlay& input_overlay, float be_streng
         const ass_synth_priv& priv_blur_y = fw_priv_blur_y.get();
         if (output_overlay->mOverlayWidth>=priv_blur_x.g_w && output_overlay->mOverlayHeight>=priv_blur_y.g_w)
         {   
-            ass_gauss_blur(plan_selected, tmp_buf.tmp, output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, output_overlay->mOverlayPitch, 
+            ass_gauss_blur(plan_selected, tmp_buf.get(), output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, output_overlay->mOverlayPitch, 
                 priv_blur_x.gt2, priv_blur_x.g_r, priv_blur_x.g_w,
                 priv_blur_y.gt2, priv_blur_y.g_r, priv_blur_y.g_w);
         }
@@ -1063,11 +1028,11 @@ bool Rasterizer::OldFixedPointBlur(const Overlay& input_overlay, float be_streng
         {
             if (g_cpuid.m_flags & CCpuID::sse2)
             {
-                be_blur(blur_plan, tmp_buf.tmp, output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
+                be_blur(blur_plan, tmp_buf.get(), output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
             }
             else
             {
-                be_blur_c(blur_plan, tmp_buf.tmp, output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
+                be_blur_c(blur_plan, tmp_buf.get(), output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
             }
         }
     }
@@ -1110,7 +1075,7 @@ bool Rasterizer::Blur(const Overlay& input_overlay, float be_strength,
     {
         if (be_strength)//this insane thing should NEVER happen
         {
-            SharedPtrOverlay tmp(new Overlay());
+            SharedPtrOverlay tmp(DEBUG_NEW Overlay());
 
             bool rv = GaussianBlur(input_overlay, gaussian_blur_strength, target_scale_x, target_scale_y, tmp);
             ASSERT(rv);
@@ -1279,18 +1244,18 @@ bool Rasterizer::BeBlur( const Overlay& input_overlay, float be_strength,
     int pass_num = static_cast<int>(scaled_be_strength);
     int pitch = output_overlay->mOverlayPitch;
     byte* blur_plan = output_overlay->mfWideOutlineEmpty ? body : border;
-    ass_tmp_buf tmp_buf( max((output_overlay->mOverlayPitch+1)*(output_overlay->mOverlayHeight+1),0) );
+    ::boost::shared_array<unsigned> tmp_buf( DEBUG_NEW unsigned[max((output_overlay->mOverlayPitch+1)*(output_overlay->mOverlayHeight+1),0)] );
     for (int pass = 0; pass < pass_num; pass++)
     {
         if(output_overlay->mOverlayWidth >= 3 && output_overlay->mOverlayHeight >= 3)
         {
             if (g_cpuid.m_flags & CCpuID::sse2)
             {
-                be_blur(blur_plan, tmp_buf.tmp, output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
+                be_blur(blur_plan, tmp_buf.get(), output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
             }
             else
             {
-                be_blur_c(blur_plan, tmp_buf.tmp, output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
+                be_blur_c(blur_plan, tmp_buf.get(), output_overlay->mOverlayWidth, output_overlay->mOverlayHeight, pitch);
             }
         }
     }
@@ -1305,7 +1270,11 @@ bool Rasterizer::BeBlur( const Overlay& input_overlay, float be_strength,
 
 ///////////////////////////////////////////////////////////////////////////
 
-static __forceinline void pixmix(DWORD *dst, DWORD color, DWORD alpha)
+typedef              void (*PixMixFunc)(DWORD *dst, DWORD color, DWORD alpha);
+static __forceinline void   pixmix_c   (DWORD *dst, DWORD color, DWORD alpha);
+static __forceinline void   pixmix_sse2(DWORD *dst, DWORD color, DWORD alpha);
+
+static __forceinline void pixmix_c(DWORD *dst, DWORD color, DWORD alpha)
 {
     int a = alpha;
     // Make sure both a and ia are in range 1..256 for the >>8 operations below to be correct
@@ -1315,6 +1284,24 @@ static __forceinline void pixmix(DWORD *dst, DWORD color, DWORD alpha)
            | ((((*dst&0x0000ff00)*ia + (color&0x0000ff00)*a)&0x00ff0000)>>8)
            | ((((*dst>>8)&0x00ff0000)*ia)&0xff000000);
 }
+
+static __forceinline void pixmix_sse2(DWORD* dst, DWORD color, DWORD alpha)
+{
+    //    alpha = (((alpha) * (color>>24)) >> 6) & 0xff;
+    color &= 0xffffff;
+    __m128i zero = _mm_setzero_si128();
+    __m128i a = _mm_set1_epi32(((alpha+1) << 16) | (0x100 - alpha));
+    __m128i d = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*dst), zero);
+    __m128i s = _mm_unpacklo_epi8(_mm_cvtsi32_si128(color), zero);
+    __m128i r = _mm_unpacklo_epi16(d, s);
+    r = _mm_madd_epi16(r, a);
+    r = _mm_srli_epi32(r, 8);
+    r = _mm_packs_epi32(r, r);
+    r = _mm_packus_epi16(r, r);
+    *dst = (DWORD)_mm_cvtsi128_si32(r);
+}
+
+///////////////////////////////////////////////////////////////////////////
 
 static __forceinline void pixmix2(DWORD *dst, DWORD color, DWORD shapealpha, DWORD clipalpha)
 {
@@ -1328,22 +1315,6 @@ static __forceinline void pixmix2(DWORD *dst, DWORD color, DWORD shapealpha, DWO
 
 #include <xmmintrin.h>
 #include <emmintrin.h>
-
-static __forceinline void pixmix_sse2(DWORD* dst, DWORD color, DWORD alpha)
-{
-//    alpha = (((alpha) * (color>>24)) >> 6) & 0xff;
-    color &= 0xffffff;
-    __m128i zero = _mm_setzero_si128();
-    __m128i a = _mm_set1_epi32(((alpha+1) << 16) | (0x100 - alpha));
-    __m128i d = _mm_unpacklo_epi8(_mm_cvtsi32_si128(*dst), zero);
-    __m128i s = _mm_unpacklo_epi8(_mm_cvtsi32_si128(color), zero);
-    __m128i r = _mm_unpacklo_epi16(d, s);
-    r = _mm_madd_epi16(r, a);
-    r = _mm_srli_epi32(r, 8);
-    r = _mm_packs_epi32(r, r);
-    r = _mm_packus_epi16(r, r);
-    *dst = (DWORD)_mm_cvtsi128_si32(r);
-}
 
 static __forceinline void pixmix2_sse2(DWORD* dst, DWORD color, DWORD shapealpha, DWORD clipalpha)
 {
@@ -1360,6 +1331,164 @@ static __forceinline void pixmix2_sse2(DWORD* dst, DWORD color, DWORD shapealpha
     r = _mm_packus_epi16(r, r);
     *dst = (DWORD)_mm_cvtsi128_si32(r);
 }
+///////////////////////////////////////////////////////////////////////////
+
+typedef              void (*PixLineMixFunc   )(BYTE* dst, const BYTE* alpha, int w, DWORD color);
+static __forceinline void  packed_pix_mix_c   (BYTE* dst, const BYTE* alpha, int w, DWORD color);
+static __forceinline void  packed_pix_mix_sse2(BYTE* dst, const BYTE* alpha, int w, DWORD color);
+
+static __forceinline void packed_pix_mix_c(BYTE* dst, const BYTE* alpha, int w, DWORD color)
+{
+    DWORD * dst_w = (DWORD *)dst;
+    for(int wt=0; wt<w; ++wt)
+        pixmix_c(&dst_w[wt], color, alpha[wt]);
+}
+
+static __forceinline __m128i packed_pix_mix_sse2(const __m128i& dst, 
+    const __m128i& c_r, const __m128i& c_g, const __m128i& c_b, const __m128i& a)
+{
+    __m128i d_a, d_r, d_g, d_b;
+
+    d_a = _mm_srli_epi32(dst, 24);
+
+    d_r = _mm_slli_epi32(dst, 8);
+    d_r = _mm_srli_epi32(d_r, 24);
+
+    d_g = _mm_slli_epi32(dst, 16);
+    d_g = _mm_srli_epi32(d_g, 24);
+
+    d_b = _mm_slli_epi32(dst, 24);
+    d_b = _mm_srli_epi32(d_b, 24);
+
+    //d_a = _mm_or_si128(d_a, c_a);
+    d_r = _mm_or_si128(d_r, c_r);
+    d_g = _mm_or_si128(d_g, c_g);
+    d_b = _mm_or_si128(d_b, c_b);
+
+    d_a = _mm_mullo_epi16(d_a, a);
+    d_r = _mm_madd_epi16(d_r, a);
+    d_g = _mm_madd_epi16(d_g, a);
+    d_b = _mm_madd_epi16(d_b, a);
+
+    d_a = _mm_srli_epi32(d_a, 8);
+    d_r = _mm_srli_epi32(d_r, 8);
+    d_g = _mm_srli_epi32(d_g, 8);
+    d_b = _mm_srli_epi32(d_b, 8);
+    
+    d_a = _mm_slli_epi32(d_a, 24);
+    d_r = _mm_slli_epi32(d_r, 16);
+    d_g = _mm_slli_epi32(d_g, 8);
+    
+    d_b = _mm_or_si128(d_b, d_g);
+    d_b = _mm_or_si128(d_b, d_r);
+    return _mm_or_si128(d_b, d_a);
+}
+
+static __forceinline void packed_pix_mix_sse2(BYTE* dst, const BYTE* alpha, int w, DWORD color)
+{
+    __m128i c_r = _mm_set1_epi32( (color & 0xFF0000) );
+    __m128i c_g = _mm_set1_epi32( (color & 0xFF00)<<8 );
+    __m128i c_b = _mm_set1_epi32( (color & 0xFF)<<16 );
+
+    __m128i zero = _mm_setzero_si128();
+
+    __m128i ones = _mm_set1_epi16(0x1);
+
+    const BYTE *alpha_end0 = alpha + (w&~15);
+    const BYTE *alpha_end = alpha + w;
+    for ( ; alpha<alpha_end0; alpha+=16, dst+=16*4 )
+    {
+        __m128i a = _mm_loadu_si128(reinterpret_cast<const __m128i*>(alpha));
+        __m128i d1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst));
+        __m128i d2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+16));
+        __m128i d3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+32));
+        __m128i d4 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+48));
+
+        __m128i ra;
+#ifdef _DEBUG
+        ra = _mm_setzero_si128();
+#endif // _DEBUG
+        ra = _mm_cmpeq_epi32(ra, ra);
+        ra = _mm_xor_si128(ra, a);
+        __m128i a1 = _mm_unpacklo_epi8(ra, a);
+        __m128i a2 = _mm_unpackhi_epi8(a1, zero);
+        a1 = _mm_unpacklo_epi8(a1, zero);
+        a1 = _mm_add_epi16(a1, ones);
+        a2 = _mm_add_epi16(a2, ones);
+
+        __m128i a3 = _mm_unpackhi_epi8(ra, a);
+        __m128i a4 = _mm_unpackhi_epi8(a3,zero);
+        a3 = _mm_unpacklo_epi8(a3,zero);
+        a3 = _mm_add_epi16(a3, ones);
+        a4 = _mm_add_epi16(a4, ones);
+
+        d1 = packed_pix_mix_sse2(d1, c_r, c_g, c_b, a1);
+        d2 = packed_pix_mix_sse2(d2, c_r, c_g, c_b, a2);
+        d3 = packed_pix_mix_sse2(d3, c_r, c_g, c_b, a3);
+        d4 = packed_pix_mix_sse2(d4, c_r, c_g, c_b, a4);
+
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), d1);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+16), d2);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+32), d3);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+48), d4);
+    }
+    DWORD * dst_w = reinterpret_cast<DWORD*>(dst);
+    for ( ; alpha<alpha_end; alpha++, dst_w++ )
+    {
+        pixmix_sse2(dst_w, color, *alpha);
+    }
+}
+
+typedef              void (*PixLineMixSingleAlphaFunc   )(BYTE* dst, BYTE alpha, int w, DWORD color);
+static __forceinline void  packed_pix_mix_c              (BYTE* dst, BYTE alpha, int w, DWORD color);
+static __forceinline void  packed_pix_mix_sse2           (BYTE* dst, BYTE alpha, int w, DWORD color);
+
+static __forceinline void  packed_pix_mix_c              (BYTE* dst, BYTE alpha, int w, DWORD color)
+{
+    const BYTE *dst_end = dst + 4*w;
+    for ( ; dst<dst_end; dst+=4 )
+    {
+        pixmix_c(reinterpret_cast<DWORD*>(dst), color, alpha);
+    }
+}
+
+static __forceinline void packed_pix_mix_sse2(BYTE* dst, BYTE alpha, int w, DWORD color)
+{
+    __m128i c_r = _mm_set1_epi32( (color & 0xFF0000) );
+    __m128i c_g = _mm_set1_epi32( (color & 0xFF00)<<8 );
+    __m128i c_b = _mm_set1_epi32( (color & 0xFF)<<16 );
+    __m128i a = _mm_set1_epi32(((alpha+1) << 16) | (0x100 - alpha));
+
+    __m128i zero = _mm_setzero_si128();
+
+    __m128i ones = _mm_set1_epi16(0x1);
+
+    const BYTE *dst_end0 = dst + ((4*w)&~63);
+    const BYTE *dst_end = dst + 4*w;
+    for ( ; dst<dst_end0; dst+=16*4 )
+    {
+        __m128i d1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst));
+        __m128i d2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+16));
+        __m128i d3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+32));
+        __m128i d4 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+48));
+
+        d1 = packed_pix_mix_sse2(d1, c_r, c_g, c_b, a);
+        d2 = packed_pix_mix_sse2(d2, c_r, c_g, c_b, a);
+        d3 = packed_pix_mix_sse2(d3, c_r, c_g, c_b, a);
+        d4 = packed_pix_mix_sse2(d4, c_r, c_g, c_b, a);
+
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst), d1);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+16), d2);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+32), d3);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+48), d4);
+    }
+    for ( ; dst<dst_end; dst+=4 )
+    {
+        pixmix_sse2(reinterpret_cast<DWORD*>(dst), color, alpha);
+    }
+}
+
+///////////////////////////////////////////////////////////////////////////
 
 #include <mmintrin.h>
 
@@ -1378,18 +1507,151 @@ static __forceinline DWORD safe_subtract(DWORD a, DWORD b)
 #endif
 }
 
-/***
- * No aligned requirement
- * 
- **/
-void AlphaBlt(byte* pY,
+///////////////////////////////////////////////////////////////////////////
+
+static __forceinline void packed_pix_add_c(BYTE* dst, const BYTE* alpha, int w, DWORD color)
+{
+    DWORD c_r = (color&0x00ff0000);
+    DWORD c_g = (color&0x0000ff00);
+    DWORD c_b = (color&0x000000ff);
+    const BYTE *alpha_end = alpha + w;
+    DWORD * dst_w = reinterpret_cast<DWORD*>(dst);
+    for ( ; alpha<alpha_end; alpha++, dst_w++ )
+    {
+        DWORD d_a = ((*dst_w&0xff000000)>>24);
+        DWORD d_r = (*dst_w&0x00ff0000);
+        DWORD d_g = (*dst_w&0x0000ff00);
+        DWORD d_b = (*dst_w&0x000000ff);
+
+        DWORD a = *alpha;
+        d_a = d_a >= a ? d_a - a : 0;
+        a++;
+        d_r += ((c_r*a>>8)&0x00ff0000);
+        d_g += ((c_g*a>>8)&0x0000ff00);
+        d_b += ((c_b*a>>8)&0x000000ff);
+        d_r = d_r<=0x00ff0000 ? d_r:0x00ff0000;
+        d_g = d_g<=0x0000ff00 ? d_g:0x0000ff00;
+        d_b = d_b<=0x000000ff ? d_b:0x000000ff;
+
+        *dst_w = (d_a<<24) | d_r | d_g | d_b;
+    }
+}
+
+static __forceinline __m128i packed_pix_add_sse2(const __m128i& dst_argbargbargbargb, 
+    const __m128i& _r_b_r_b_r_b_r_b, const __m128i& _a_g_a_g_a_g_a_g, const __m128i& _a_a_a_a_a_a_a_a,
+    const __m128i& F___F___F___F___)
+{
+    __m128i _r_b, a_g_, tmp;
+
+    _r_b = _mm_mullo_epi16(_r_b_r_b_r_b_r_b, _a_a_a_a_a_a_a_a);
+    a_g_ = _mm_mullo_epi16(_a_g_a_g_a_g_a_g, _a_a_a_a_a_a_a_a);
+    _r_b = _mm_srli_epi16(_r_b, 8);
+    a_g_ = _mm_srli_epi16(a_g_, 8);
+    a_g_ = _mm_slli_epi16(a_g_, 8);
+    a_g_ = _mm_or_si128  (a_g_, _r_b);
+
+    tmp = _mm_xor_si128(dst_argbargbargbargb, F___F___F___F___);
+    tmp = _mm_adds_epu8(tmp, a_g_);
+    return _mm_xor_si128(tmp, F___F___F___F___);
+}
+
+static __forceinline void packed_pix_add_sse2(BYTE* dst, const BYTE* alpha, int w, DWORD color)
+{
+    DWORD _r_b =   (color & 0xFF00FF);
+    DWORD _f_g = (((color & 0x00FF00)>>8)|0xFF0000);
+
+    __m128i _r_b_r_b_r_b_r_b = _mm_set1_epi32( _r_b );
+    __m128i _F_g_F_g_F_g_F_g = _mm_set1_epi32( _f_g );
+    __m128i F___F___F___F___ = _mm_set1_epi32(0xFF000000);
+
+    __m128i zero = _mm_setzero_si128();
+
+    __m128i ones = _mm_set1_epi16(0x1);
+
+    const BYTE *alpha_end0 = alpha + (w&~15);
+    const BYTE *alpha_end = alpha + w;
+    for ( ; alpha<alpha_end0; alpha+=16, dst+=16*4 )
+    {
+        __m128i a  = _mm_loadu_si128(reinterpret_cast<const __m128i*>(alpha));
+        __m128i d1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst));
+        __m128i d2 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+16));
+        __m128i d3 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+32));
+        __m128i d4 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(dst+48));
+
+        __m128i a1, a2, a3, a4;
+        a1 = _mm_unpacklo_epi8(a , zero);
+        a1 = _mm_adds_epu16   (a1, ones);
+        a2 = _mm_unpackhi_epi16(a1, a1);
+        a1 = _mm_unpacklo_epi16(a1, a1);
+
+        a3 = _mm_unpackhi_epi8(a , zero);
+        a3 = _mm_adds_epu16   (a3, ones);
+        a4 = _mm_unpackhi_epi16(a3, a3);
+        a3 = _mm_unpacklo_epi16(a3, a3);
+
+        // FF * (a+1) >> 8 = a
+        // d? += (a, r*(a+1)>>8, g*(a+1)>>8, b*(a+1)>>8)
+        d1 = packed_pix_add_sse2(d1, _r_b_r_b_r_b_r_b, _F_g_F_g_F_g_F_g, a1, F___F___F___F___);
+        d2 = packed_pix_add_sse2(d2, _r_b_r_b_r_b_r_b, _F_g_F_g_F_g_F_g, a2, F___F___F___F___);
+        d3 = packed_pix_add_sse2(d3, _r_b_r_b_r_b_r_b, _F_g_F_g_F_g_F_g, a3, F___F___F___F___);
+        d4 = packed_pix_add_sse2(d4, _r_b_r_b_r_b_r_b, _F_g_F_g_F_g_F_g, a4, F___F___F___F___);
+
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst)   , d1);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+16), d2);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+32), d3);
+        _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+48), d4);
+    }
+    DWORD * dst_w = reinterpret_cast<DWORD*>(dst);
+    for ( ; alpha<alpha_end; alpha++, dst_w++ )
+    {
+        int a = *alpha + 1;
+        DWORD r_b = ((_r_b * a)&0xff00ff00)>>8;
+        DWORD a_g = ((_f_g * a)&0xff00ff00)>>8;// FF * (*alpha+1) >> 8 = alpha
+        *dst_w ^= 0xff000000;
+        r_b +=  (*dst_w & 0x00ff00ff);
+        a_g += ((*dst_w & 0xff00ff00)>>8);
+        r_b = r_b ^ ((r_b ^ 0xff00ff) & (((r_b&0xff00ff00)>>8)*0x0FFF));//r < 0xff ? r : 0xff;
+        a_g = a_g ^ ((a_g ^ 0xff00ff) & (((a_g&0xff00ff00)>>8)*0x0FFF));
+        a_g <<= 8;
+        *dst_w = (r_b | a_g);
+        *dst_w ^= 0xff000000;
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+
+typedef void (*AlphaBlt8bppFunc)(byte* pY, const byte* am, const byte Y, int h, int w, int src_stride, int dst_stride);
+void           AlphaBlt8bppC    (byte* pY, const byte* am, const byte Y, int h, int w, int src_stride, int dst_stride);
+void           AlphaBlt8bppSse2 (byte* pY, const byte* am, const byte Y, int h, int w, int src_stride, int dst_stride);
+
+void AlphaBlt8bppC(byte* pY,
     const byte* pAlphaMask, 
     const byte Y, 
     int h, int w, int src_stride, int dst_stride)
 {
-    if(!pY || !pAlphaMask)
-        return;
+    for( ; h>0; h--, pAlphaMask += src_stride, pY += dst_stride )
+    {
+        const BYTE* sa = pAlphaMask;
+        BYTE* dy = pY;
+        const BYTE* dy_end = pY + w;
 
+        for(;dy < dy_end; sa++, dy++)
+        {
+            *dy = (*dy * (256 - *sa)+ Y*(*sa+1))>>8;
+        }
+    }
+}
+
+/***
+ * No aligned requirement
+ * 
+ **/
+void AlphaBlt8bppSse2(byte* pY,
+    const byte* pAlphaMask, 
+    const byte Y, 
+    int h, int w, int src_stride, int dst_stride)
+{   
     __m128i zero = _mm_setzero_si128();
     __m128i s = _mm_set1_epi16(Y);               //s = c  0  c  0  c  0  c  0  c  0  c  0  c  0  c  0    
 
@@ -1460,26 +1722,40 @@ void AlphaBlt(byte* pY,
     }
     else
     {
-        for( ; h>0; h--, pAlphaMask += src_stride, pY += dst_stride )
-        {
-            const BYTE* sa = pAlphaMask;      
-            BYTE* dy = pY;
-            const BYTE* dy_end = pY + w;   
+        AlphaBlt8bppC(pY, pAlphaMask, Y, h, w, src_stride, dst_stride);
+    }
+}
 
-            for(;dy < dy_end; sa++, dy++)
-            {
-                *dy = (*dy * (256 - *sa)+ Y*(*sa+1))>>8;
-            }
+typedef 
+void (*AlphaBlt8bppSingleAlphaFunc)(byte* pY, const byte alpha, const byte Y, int h, int w, int dst_stride);
+void   AlphaBlt8bppSingleAlphaC    (byte* pY, const byte alpha, const byte Y, int h, int w, int dst_stride);
+void   AlphaBlt8bppSingleAlphaSse2 (byte* pY, const byte alpha, const byte Y, int h, int w, int dst_stride);
+
+void AlphaBlt8bppSingleAlphaC(byte* pY,
+    const byte alpha, 
+    const byte Y, 
+    int h, int w, int dst_stride)
+{   
+    int yPremul = Y*(alpha+1);
+    int dstAlpha = 0x100 - alpha;
+
+    for( ; h>0; h--, pY += dst_stride )
+    {
+        BYTE* dy = pY;
+        const BYTE* dy_end = pY + w;
+
+        for(;dy < dy_end; dy++)
+        {
+            *dy = (*dy * dstAlpha + yPremul)>>8;
         }
     }
-    //__asm emms;
 }
 
 /***
  * No aligned requirement
  * 
  **/
-void AlphaBlt(byte* pY,
+void AlphaBlt8bppSingleAlphaSse2(byte* pY,
     const byte alpha, 
     const byte Y, 
     int h, int w, int dst_stride)
@@ -1529,43 +1805,11 @@ void AlphaBlt(byte* pY,
     }
     else
     {
-        for( ; h>0; h--, pY += dst_stride )
-        {   
-            BYTE* dy = pY;
-            const BYTE* dy_end = pY + w;
-
-            for(;dy < dy_end; dy++)
-            {
-                *dy = (*dy * dstAlpha + yPremul)>>8;
-            }
-        }
-    }
-    //__asm emms;
-}
-
-/***
- * No aligned requirement
- * 
- **/
-void AlphaBltC(byte* pY,
-    const byte alpha, 
-    const byte Y, 
-    int h, int w, int dst_stride)
-{   
-    int yPremul = Y*(alpha+1);
-    int dstAlpha = 0x100 - alpha;
-
-    for( ; h>0; h--, pY += dst_stride )
-    {
-        BYTE* dy = pY;
-        const BYTE* dy_end = pY + w;
-
-        for(;dy < dy_end; dy++)
-        {
-            *dy = (*dy * dstAlpha + yPremul)>>8;
-        }
+        AlphaBlt8bppSingleAlphaC(pY, alpha, Y, h, w, dst_stride);
     }
 }
+
+///////////////////////////////////////////////////////////////////////////
 
 // For CPUID usage in Rasterizer::Draw
 #include "../dsutil/vd.h"
@@ -1593,20 +1837,24 @@ void OverlapRegion(tSpanBuffer& dst, const tSpanBuffer& src, int dx, int dy)
             // B spans don't overlap, so begin merge loop with A first.
             for(;;)
             {
-                // If we run out of A spans or the A span doesn't overlap,
-                // then the next B span can't either (because B spans don't
-                // overlap) and we exit.
-                if(itA == itAE || (*itA).first > x2)
-                    break;
-                do {x2 = _MAX(x2, (*itA++).second);}
-                while(itA != itAE && (*itA).first <= x2);
+                while (itA != itAE && (*itA).first <= x2) {
+                    x2 = _MAX(x2, (*itA).second);
+                    ++itA;
+                }
+
                 // If we run out of B spans or the B span doesn't overlap,
                 // then the next A span can't either (because A spans don't
                 // overlap) and we exit.
                 if(itB == itBE || (*itB).first + offset1 > x2)
                     break;
-                do {x2 = _MAX(x2, (*itB++).second + offset2);}
+                do {x2 = _MAX(x2, (*itB).second + offset2); ++itB;}
                 while(itB != itBE && (*itB).first + offset1 <= x2);
+                // If we run out of A spans or the A span doesn't overlap,
+                // then the next B span can't either (because B spans don't
+                // overlap) and we exit.
+
+                if (itA == itAE || (*itA).first > x2)
+                    break;
             }
             // Flush span.
             dst.push_back(tSpan(x1, x2));
@@ -1620,20 +1868,24 @@ void OverlapRegion(tSpanBuffer& dst, const tSpanBuffer& src, int dx, int dy)
             // A spans don't overlap, so begin merge loop with B first.
             for(;;)
             {
+                while (itB != itBE && (*itB).first + offset1 <= x2) {
+                    x2 = _MAX(x2, (*itB).second + offset2);
+                    ++itB;
+                }
+
+                // If we run out of A spans or the A span doesn't overlap,
+                // then the next B span can't either (because B spans don't
+                // overlap) and we exit.
+
+                if(itA == itAE || (*itA).first > x2)
+                    break;
+                do {x2 = _MAX(x2, (*itA).second); ++itA;}
+                while(itA != itAE && (*itA).first <= x2);
                 // If we run out of B spans or the B span doesn't overlap,
                 // then the next A span can't either (because A spans don't
                 // overlap) and we exit.
                 if(itB == itBE || (*itB).first + offset1 > x2)
                     break;
-                do {x2 = _MAX(x2, (*itB++).second + offset2);}
-                while(itB != itBE && (*itB).first + offset1 <= x2);
-                // If we run out of A spans or the A span doesn't overlap,
-                // then the next B span can't either (because B spans don't
-                // overlap) and we exit.
-                if(itA == itAE || (*itA).first > x2)
-                    break;
-                do {x2 = _MAX(x2, (*itA++).second);}
-                while(itA != itAE && (*itA).first <= x2);
             }
             // Flush span.
             dst.push_back(tSpan(x1, x2));
@@ -1641,27 +1893,26 @@ void OverlapRegion(tSpanBuffer& dst, const tSpanBuffer& src, int dx, int dy)
     }
     // Copy over leftover spans.
     while(itA != itAE)
-        dst.push_back(*itA++);
+        dst.push_back(*itA);
+        ++itA;
     while(itB != itBE)
     {
-        dst.push_back(tSpan((*itB).first + offset1, (*itB).second + offset2));
+        unsigned __int64 x1 = (*itB).first + offset1;
+        unsigned __int64 x2 = (*itB).second + offset2;
         ++itB;
+        while (itB != itBE && (*itB).first + offset1 <= x2) {
+            x2 = _MAX(x2, (*itB).second + offset2);
+            ++itB;
+        }
+        dst.push_back(tSpan(x1, x2));
     }
 }
 
-// Render a subpicture onto a surface.
-// spd is the surface to render on.
-// clipRect is a rectangular clip region to render inside.
-// pAlphaMask is an alpha clipping mask.
-// xsub and ysub ???
-// switchpts seems to be an array of fill colours interlaced with coordinates.
-//    switchpts[i*2] contains a colour and switchpts[i*2+1] contains the coordinate to use that colour from
-// fBody tells whether to render the body of the subs.
-// fBorder tells whether to render the border of the subs.
+
 SharedPtrByte Rasterizer::CompositeAlphaMask(const SharedPtrOverlay& overlay, const CRect& clipRect, 
     const GrayImage2* alpha_mask, 
     int xsub, int ysub, const DWORD* switchpts, bool fBody, bool fBorder, 
-    CRect *outputDirtyRect, unsigned int* ret_val)
+    CRect *outputDirtyRect)
 {
     //fix me: check and log error
     SharedPtrByte result;
@@ -1677,7 +1928,6 @@ SharedPtrByte Rasterizer::CompositeAlphaMask(const SharedPtrOverlay& overlay, co
 
     // Remember that all subtitle coordinates are specified in 1/8 pixels
     // (x+4)>>3 rounds to nearest whole pixel.
-    // ??? What is xsub, ysub, mOffsetX and mOffsetY ?    
     int x = (xsub + overlay->mOffsetX + 4)>>3;
     int y = (ysub + overlay->mOffsetY + 4)>>3;
     int w = overlay->mOverlayWidth;
@@ -1698,12 +1948,6 @@ SharedPtrByte Rasterizer::CompositeAlphaMask(const SharedPtrOverlay& overlay, co
     // Grab the first colour
     DWORD color = switchpts[0];
     byte* s_base = (byte*)xy_malloc(overlay->mOverlayPitch * overlay->mOverlayHeight);
-    if(!s_base)
-    {
-        *ret_val = 1;
-        return result;
-    }
-
     const byte* alpha_mask_data = alpha_mask != NULL ? alpha_mask->data.get() : NULL;
     const int alpha_mask_pitch = alpha_mask != NULL ? alpha_mask->pitch : 0;
     if(alpha_mask_data!=NULL )
@@ -1739,6 +1983,67 @@ SharedPtrByte Rasterizer::CompositeAlphaMask(const SharedPtrOverlay& overlay, co
     return result;
 }
 
+
+///////////////////////////////////////////////////////////////////////////
+
+typedef void (*DrawSingleColorPackPixFunc)(      DWORD *dst,
+                                           const BYTE  *src, 
+                                           DWORD        color, 
+                                           int          w, 
+                                           int          h,
+                                           int          src_pitch,
+                                           int          dst_pitch);
+template<PixLineMixFunc pixmix_line>
+void DrawSingleColorPackPix(      DWORD *dst,
+                            const BYTE  *src, 
+                            DWORD        color, 
+                            int          w, 
+                            int          h,
+                            int          src_pitch,
+                            int          dst_pitch)
+{
+    while(h--)
+    {
+        pixmix_line((BYTE*)dst, src, w, color);
+        src += src_pitch;
+        dst = (unsigned long *)((char *)dst + dst_pitch);
+    }
+}
+
+
+///////////////////////////////////////////////////////////////////////////
+
+typedef void (*DrawMultiColorPackPixFunc)(     DWORD *dst,
+                                         const BYTE  *src, 
+                                         const DWORD *switchpts, 
+                                         int          xo,
+                                         int          w, 
+                                         int          h,
+                                         int          src_pitch,
+                                         int          dst_pitch);
+template<PixMixFunc pixmix>
+void DrawMultiColorPackPix(     DWORD *dst,
+                          const BYTE  *src, 
+                          const DWORD *switchpts, 
+                          int          xo, /*fix me: remove this parameter*/
+                          int          w, 
+                          int          h,
+                          int          src_pitch,
+                          int          dst_pitch)
+{
+    DWORD color = switchpts[0];
+    while(h--)
+    {
+        const DWORD *sw = switchpts;
+        for(int wt=0; wt<w; ++wt)
+        {
+            if(wt+xo >= sw[1]) {while(wt+xo >= sw[1]) sw += 2; color = sw[-2];}
+            pixmix(&dst[wt], color, src[wt]);
+        }
+        src += src_pitch;
+        dst = (DWORD *)((BYTE *)dst + dst_pitch);
+    }
+}
 
 // 
 // draw overlay[clipRect] to bitmap[0,0,w,h]
@@ -1780,11 +2085,22 @@ void Rasterizer::Draw(XyBitmap* bitmap, SharedPtrOverlay overlay, const CRect& c
     int draw_method = 0;
     if(fSingleColor)
         draw_method |= DM::SINGLE_COLOR;
-    if(fSSE2)
-        draw_method |= DM::SSE2;
     if(PLANAR)
         draw_method |= DM::AYUV_PLANAR;
-    
+
+    const DrawMultiColorPackPixFunc draw_multi_color_pack_pix[] = {
+        DrawMultiColorPackPix<pixmix_c>,
+        DrawMultiColorPackPix<pixmix_sse2>
+    };
+    const DrawSingleColorPackPixFunc draw_single_color_pack_pix[] = {
+        DrawSingleColorPackPix<packed_pix_mix_c>,
+        DrawSingleColorPackPix<packed_pix_mix_sse2>
+    };
+    const AlphaBlt8bppFunc alphablt_8bpp[] = {
+        AlphaBlt8bppC,
+        AlphaBlt8bppSse2
+    };
+
     // draw
     // Grab the first colour
     DWORD color = switchpts[0];
@@ -1800,78 +2116,30 @@ void Rasterizer::Draw(XyBitmap* bitmap, SharedPtrOverlay overlay, const CRect& c
     // Every remaining line in the bitmap to be rendered...
     switch(draw_method)
     {
-    case   DM::SINGLE_COLOR |   DM::SSE2 | 0*DM::AYUV_PLANAR :
+    case   DM::SINGLE_COLOR | 0*DM::AYUV_PLANAR :
     {
-        while(h--)
-        {
-            for(int wt=0; wt<w; ++wt)
-                // The <<6 is due to pixmix expecting the alpha parameter to be
-                // the multiplication of two 6-bit unsigned numbers but we
-                // only have one here. (No alpha mask.)
-                pixmix_sse2(&dst[wt], color, s[wt]);
-            s += overlayPitch;
-            dst = (unsigned long *)((char *)dst + bitmap->pitch);
-        }
+        draw_single_color_pack_pix[fSSE2](dst, s, color, w, h, overlayPitch, bitmap->pitch);
     }
     break;
-    case   DM::SINGLE_COLOR | 0*DM::SSE2 | 0*DM::AYUV_PLANAR :
+    case 0*DM::SINGLE_COLOR | 0*DM::AYUV_PLANAR :
     {
-        while(h--)
-        {
-            for(int wt=0; wt<w; ++wt)
-                pixmix(&dst[wt], color, s[wt]);
-            s += overlayPitch;
-            dst = (unsigned long *)((char *)dst + bitmap->pitch);
-        }
+        draw_multi_color_pack_pix[fSSE2](dst, s, switchpts, xo, w, h, overlayPitch, bitmap->pitch);
     }
     break;
-    case 0*DM::SINGLE_COLOR |   DM::SSE2 | 0*DM::AYUV_PLANAR :
-    {
-        while(h--)
-        {
-            const DWORD *sw = switchpts;
-            for(int wt=0; wt<w; ++wt)
-            {
-                // xo is the offset (usually negative) we have moved into the image
-                // So if we have passed the switchpoint (?) switch to another colour
-                // (So switchpts stores both colours *and* coordinates?)
-                if(wt+xo >= sw[1]) {while(wt+xo >= sw[1]) sw += 2; color = sw[-2];}
-                pixmix_sse2(&dst[wt], color, s[wt]);
-            }
-            s += overlayPitch;
-            dst = (unsigned long *)((char *)dst + bitmap->pitch);
-        }
-    }
-    break;
-    case 0*DM::SINGLE_COLOR | 0*DM::SSE2 | 0*DM::AYUV_PLANAR :
-    {
-        while(h--)
-        {
-            const DWORD *sw = switchpts;
-            for(int wt=0; wt<w; ++wt)
-            {
-                if(wt+xo >= sw[1]) {while(wt+xo >= sw[1]) sw += 2; color = sw[-2];}
-                pixmix(&dst[wt], color, s[wt]);
-            }
-            s += overlayPitch;
-            dst = (unsigned long *)((char *)dst + bitmap->pitch);
-        }
-    }
-    break;
-    case   DM::SINGLE_COLOR |   DM::SSE2 |   DM::AYUV_PLANAR :
+    case   DM::SINGLE_COLOR |   DM::AYUV_PLANAR :
     {
         unsigned char* dst_A = bitmap->plans[0] + dst_offset;
         unsigned char* dst_Y = bitmap->plans[1] + dst_offset;
         unsigned char* dst_U = bitmap->plans[2] + dst_offset;
         unsigned char* dst_V = bitmap->plans[3] + dst_offset;
 
-        AlphaBlt(dst_Y, s, ((color)>>16)&0xff, h, w, overlayPitch, bitmap->pitch);
-        AlphaBlt(dst_U, s, ((color)>>8)&0xff, h, w, overlayPitch, bitmap->pitch);
-        AlphaBlt(dst_V, s, ((color))&0xff, h, w, overlayPitch, bitmap->pitch);
-        AlphaBlt(dst_A, s, 0, h, w, overlayPitch, bitmap->pitch);
+        alphablt_8bpp[fSSE2](dst_Y, s, ((color)>>16)&0xff, h, w, overlayPitch, bitmap->pitch);
+        alphablt_8bpp[fSSE2](dst_U, s, ((color)>>8 )&0xff, h, w, overlayPitch, bitmap->pitch);
+        alphablt_8bpp[fSSE2](dst_V, s, ((color)    )&0xff, h, w, overlayPitch, bitmap->pitch);
+        alphablt_8bpp[fSSE2](dst_A, s,                  0, h, w, overlayPitch, bitmap->pitch);
     }
     break;
-    case 0*DM::SINGLE_COLOR |   DM::SSE2 |   DM::AYUV_PLANAR :
+    case 0*DM::SINGLE_COLOR |   DM::AYUV_PLANAR :
     {
         unsigned char* dst_A = bitmap->plans[0] + dst_offset;
         unsigned char* dst_Y = bitmap->plans[1] + dst_offset;
@@ -1888,10 +2156,10 @@ void Rasterizer::Draw(XyBitmap* bitmap, SharedPtrOverlay overlay, const CRect& c
             sw += 2;
             if( new_x < last_x )
                 continue;
-            AlphaBlt(dst_Y, s + last_x - xo, (color>>16)&0xff, h, new_x-last_x, overlayPitch, bitmap->pitch);
-            AlphaBlt(dst_U, s + last_x - xo, (color>>8)&0xff, h, new_x-last_x, overlayPitch, bitmap->pitch);
-            AlphaBlt(dst_V, s + last_x - xo, (color)&0xff, h, new_x-last_x, overlayPitch, bitmap->pitch);
-            AlphaBlt(dst_A, s + last_x - xo, 0, h, new_x-last_x, overlayPitch, bitmap->pitch);
+            alphablt_8bpp[fSSE2](dst_Y, s + last_x - xo, (color>>16)&0xff, h, new_x-last_x, overlayPitch, bitmap->pitch);
+            alphablt_8bpp[fSSE2](dst_U, s + last_x - xo, (color>>8 )&0xff, h, new_x-last_x, overlayPitch, bitmap->pitch);
+            alphablt_8bpp[fSSE2](dst_V, s + last_x - xo, (color    )&0xff, h, new_x-last_x, overlayPitch, bitmap->pitch);
+            alphablt_8bpp[fSSE2](dst_A, s + last_x - xo,                0, h, new_x-last_x, overlayPitch, bitmap->pitch);
 
             dst_A += new_x - last_x;
             dst_Y += new_x - last_x;
@@ -1901,571 +2169,762 @@ void Rasterizer::Draw(XyBitmap* bitmap, SharedPtrOverlay overlay, const CRect& c
         }
     }
     break;
-    case   DM::SINGLE_COLOR | 0*DM::SSE2 |   DM::AYUV_PLANAR :
-    {
-//        char * debug_dst=(char*)dst;int h2 = h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\b2_rt", (char*)&color, sizeof(color)) );
-//        XY_DO_ONCE( xy_logger::write_file("G:\\b2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst += spd.pitch*spd.h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\b2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst += spd.pitch*spd.h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\b2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst += spd.pitch*spd.h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\b2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst=(char*)dst;
-
-        unsigned char* dst_A = bitmap->plans[0] + dst_offset;
-        unsigned char* dst_Y = bitmap->plans[1] + dst_offset;
-        unsigned char* dst_U = bitmap->plans[2] + dst_offset;
-        unsigned char* dst_V = bitmap->plans[3] + dst_offset;
-        while(h--)
-        {
-            for(int wt=0; wt<w; ++wt)
-            {
-                DWORD temp = COMBINE_AYUV(dst_A[wt], dst_Y[wt], dst_U[wt], dst_V[wt]);
-                pixmix(&temp, color, s[wt]);
-                SPLIT_AYUV(temp, dst_A+wt, dst_Y+wt, dst_U+wt, dst_V+wt);
-            }
-            s += overlayPitch;
-            dst_A += bitmap->pitch;
-            dst_Y += bitmap->pitch;
-            dst_U += bitmap->pitch;
-            dst_V += bitmap->pitch;
-        }
-//        XY_DO_ONCE( xy_logger::write_file("G:\\a2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst += spd.pitch*spd.h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\a2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst += spd.pitch*spd.h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\a2_rt", debug_dst, (h2-1)*spd.pitch) );
-//        debug_dst += spd.pitch*spd.h;
-//        XY_DO_ONCE( xy_logger::write_file("G:\\a2_rt", debug_dst, (h2-1)*spd.pitch) );
-    }
-    break;
-    case 0*DM::SINGLE_COLOR | 0*DM::SSE2 |   DM::AYUV_PLANAR :
-    {
-        unsigned char* dst_A = bitmap->plans[0] + dst_offset;
-        unsigned char* dst_Y = bitmap->plans[1] + dst_offset;
-        unsigned char* dst_U = bitmap->plans[2] + dst_offset;
-        unsigned char* dst_V = bitmap->plans[3] + dst_offset;
-        while(h--)
-        {
-            const DWORD *sw = switchpts;
-            for(int wt=0; wt<w; ++wt)
-            {
-                if(wt+xo >= sw[1]) {while(wt+xo >= sw[1]) sw += 2; color = sw[-2];}
-                DWORD temp = COMBINE_AYUV(dst_A[wt], dst_Y[wt], dst_U[wt], dst_V[wt]);
-                pixmix(&temp, color, (s[wt]*(color>>24))>>8);
-                SPLIT_AYUV(temp, dst_A+wt, dst_Y+wt, dst_U+wt, dst_V+wt);
-            }
-            s += overlayPitch;
-            dst_A += bitmap->pitch;
-            dst_Y += bitmap->pitch;
-            dst_U += bitmap->pitch;
-            dst_V += bitmap->pitch;
-        }
-    }
-    break;
     }
     return;
 }
 
 void Rasterizer::FillSolidRect(SubPicDesc& spd, int x, int y, int nWidth, int nHeight, DWORD argb)
 {
+    const AlphaBlt8bppSingleAlphaFunc alphablt_8bpp[] = {
+        AlphaBlt8bppSingleAlphaC,
+        AlphaBlt8bppSingleAlphaSse2
+    };
+
+    const PixLineMixSingleAlphaFunc pix_line_mix[] = {
+        packed_pix_mix_c,
+        packed_pix_mix_sse2
+    };
+
     bool fSSE2 = !!(g_cpuid.m_flags & CCpuID::sse2);
     bool AYUV_PLANAR = (spd.type==MSP_AYUV_PLANAR);
     int draw_method = 0;
-    if(fSSE2)
-        draw_method |= DM::SSE2;
     if(AYUV_PLANAR)
         draw_method |= DM::AYUV_PLANAR;
 
     switch (draw_method)
     {
-    case   DM::SSE2 | 0*DM::AYUV_PLANAR :
+    case 0*DM::AYUV_PLANAR :
     {
+        BYTE *dst = ((BYTE*)spd.bits + spd.pitch * y) + x*4;
         for (int wy=y; wy<y+nHeight; wy++) {
-            DWORD* dst = (DWORD*)((BYTE*)spd.bits + spd.pitch * wy) + x;
-            for(int wt=0; wt<nWidth; ++wt) {
-                pixmix_sse2(&dst[wt], argb, argb>>24);
-            }
+            pix_line_mix[fSSE2](dst, argb>>24, nWidth, argb);
+            dst += spd.pitch;
         }
     }
     break;
-    case 0*DM::SSE2 | 0*DM::AYUV_PLANAR :
-    {
-        for (int wy=y; wy<y+nHeight; wy++) {
-            DWORD* dst = (DWORD*)((BYTE*)spd.bits + spd.pitch * wy) + x;
-            for(int wt=0; wt<nWidth; ++wt) {
-                pixmix(&dst[wt], argb,  argb>>24);
-            }
-        }
-    }
-    break;
-    case   DM::SSE2 |   DM::AYUV_PLANAR :
+    case   DM::AYUV_PLANAR :
     {
         BYTE* dst = reinterpret_cast<BYTE*>(spd.bits) + spd.pitch * y + x;
         BYTE* dst_A = dst;
         BYTE* dst_Y = dst_A + spd.pitch*spd.h;
         BYTE* dst_U = dst_Y + spd.pitch*spd.h;
         BYTE* dst_V = dst_U + spd.pitch*spd.h;
-        AlphaBlt(dst_Y, argb>>24, ((argb)>>16)&0xff, nHeight, nWidth, spd.pitch);
-        AlphaBlt(dst_U, argb>>24, ((argb)>>8)&0xff, nHeight, nWidth, spd.pitch);
-        AlphaBlt(dst_V, argb>>24, ((argb))&0xff, nHeight, nWidth, spd.pitch);
-        AlphaBlt(dst_A, argb>>24, 0, nHeight, nWidth, spd.pitch);
-    }
-    break;
-    case 0*DM::SSE2 |   DM::AYUV_PLANAR :
-    {
-        BYTE* dst = reinterpret_cast<BYTE*>(spd.bits) + spd.pitch * y + x;
-        BYTE* dst_A = dst;
-        BYTE* dst_Y = dst_A + spd.pitch*spd.h;
-        BYTE* dst_U = dst_Y + spd.pitch*spd.h;
-        BYTE* dst_V = dst_U + spd.pitch*spd.h;
-        AlphaBltC(dst_Y, argb>>24, ((argb)>>16)&0xff, nHeight, nWidth, spd.pitch);
-        AlphaBltC(dst_U, argb>>24, ((argb)>>8)&0xff, nHeight, nWidth, spd.pitch);
-        AlphaBltC(dst_V, argb>>24, ((argb))&0xff, nHeight, nWidth, spd.pitch);
-        AlphaBltC(dst_A, argb>>24, 0, nHeight, nWidth, spd.pitch);
+        alphablt_8bpp[fSSE2](dst_Y, argb>>24, ((argb)>>16)&0xff, nHeight, nWidth, spd.pitch);
+        alphablt_8bpp[fSSE2](dst_U, argb>>24, ((argb)>>8)&0xff , nHeight, nWidth, spd.pitch);
+        alphablt_8bpp[fSSE2](dst_V, argb>>24, ((argb))&0xff    , nHeight, nWidth, spd.pitch);
+        alphablt_8bpp[fSSE2](dst_A, argb>>24,                 0, nHeight, nWidth, spd.pitch);
     }
     break;
     }
 }
 
+///////////////////////////////////////////////////////////////
+
+typedef void (*MixLineFunc)(BYTE* dst, const BYTE* alpha, int w, DWORD color);
+
+typedef void (*DoAdditionDrawFunc)(BYTE* dst, const BYTE* src, DWORD color, int w, int h, int src_pitch, int dst_pitch);
+typedef void (*DoAdditionDrawMultiColorFunc)(      BYTE  *dst, 
+                                             const BYTE  *src, 
+                                             const DWORD *switchpts, 
+                                             int          w, 
+                                             int          h,
+                                             int          src_pitch,
+                                             int          dst_pitch);
+
+template<MixLineFunc mix_line_func>
+void DoAdditionDraw(BYTE* dst, const BYTE* src, DWORD color, int w, int h, int src_pitch, int dst_pitch)
+{
+    while(h--)
+    {
+        mix_line_func( dst, src, w, color );
+        src += src_pitch;
+        dst += dst_pitch;
+    }
+}
+
+template<MixLineFunc mix_line_func>
+void DoAdditionDrawMultiColor(      BYTE  *dst, 
+                              const BYTE  *src, 
+                              const DWORD *switchpts, 
+                              int          w, 
+                              int          h,
+                              int          src_pitch,
+                              int          dst_pitch)
+{
+    ASSERT(w>=0);
+    while(h--)
+    {
+        const DWORD *sw = switchpts;
+        DWORD *dst1 = (DWORD *)dst;
+        const BYTE *src1 = src;
+        DWORD last_x = switchpts[1];
+        while(last_x<(DWORD)w)
+        {
+            DWORD new_x = sw[3] < (DWORD)w ? sw[3] : (DWORD)w;
+            DWORD color = sw[0];
+            sw += 2;
+            if( new_x < last_x )
+                continue;
+            mix_line_func((BYTE*)dst1, src1, new_x-last_x, color);
+            dst1 += new_x - last_x;
+            src1 += new_x - last_x;
+            last_x = new_x;
+        }
+        dst += dst_pitch;
+        src += src_pitch;
+    }
+}
+
+// 
+// draw overlay[clipRect] to bitmap[0,0,w,h] using addition instead of alphablend, i.e. bitmap += overlay
+// 
+void Rasterizer::AdditionDraw(XyBitmap         *bitmap   , 
+                              SharedPtrOverlay  overlay  , 
+                              const CRect      &clipRect , 
+                              byte             *s_base   , 
+                              int               xsub     ,
+                              int               ysub     ,
+                              const DWORD      *switchpts, 
+                              bool              fBody    , 
+                              bool              fBorder)
+{
+    if (!switchpts || !fBody && !fBorder) return;
+    if (bitmap==NULL)
+    {
+        ASSERT(0);
+        return;
+    }
+    // clip
+    // Limit drawn area to rectangular clip area
+    CRect r = clipRect;
+    // Remember that all subtitle coordinates are specified in 1/8 pixels
+    // (x+4)>>3 rounds to nearest whole pixel.
+    int overlayPitch =  overlay->mOverlayPitch;
+    int x            = (overlay->mOffsetX + xsub + 4)>>3;
+    int y            = (overlay->mOffsetY + ysub + 4)>>3;
+    int w            =  overlay->mOverlayWidth;
+    int h            =  overlay->mOverlayHeight;
+    int xo = 0, yo = 0;
+
+    if(x < r.left) {xo = r.left-x; w -= r.left-x; x = r.left;}
+    if(y < r.top ) {yo = r.top -y; h -= r.top -y; y = r.top ;}
+    if(x+w > r.right ) w = r.right -x;
+    if(y+h > r.bottom) h = r.bottom-y;
+    // Check if there's actually anything to render
+    if (w <= 0 || h <= 0) return;
+    // must have enough space to draw into
+    if (!(x >= bitmap->x && y >= bitmap->y && x+w <= bitmap->x + bitmap->w && y+h <= bitmap->y + bitmap->h))
+    {
+        XY_LOG_FATAL("Overflow!");
+        ASSERT(0);
+    }
+
+    const DoAdditionDrawFunc do_draw_single_color[] = {
+        DoAdditionDraw<packed_pix_add_c   >,
+        DoAdditionDraw<packed_pix_add_sse2>
+    };
+    const DoAdditionDrawMultiColorFunc do_draw_multi_color[] = {
+        DoAdditionDrawMultiColor<packed_pix_add_c   >,
+        DoAdditionDrawMultiColor<packed_pix_add_sse2>
+    };
+
+    // CPUID from VDub
+    bool fSSE2 = !!(g_cpuid.m_flags & CCpuID::sse2);
+    bool fSingleColor = (switchpts[1]==0xffffffff);
+    bool PLANAR = (bitmap->type==XyBitmap::PLANNA);
+
+    // draw
+    // Grab the first colour
+    DWORD color = switchpts[0];
+    const byte* s = s_base + overlay->mOverlayPitch*yo + xo;
+
+    int dst_offset = 0;
+    if (bitmap->type==XyBitmap::PLANNA)
+        dst_offset = bitmap->pitch*(y-bitmap->y) +  x - bitmap->x;
+    else
+        dst_offset = bitmap->pitch*(y-bitmap->y) + (x - bitmap->x)*4;
+    BYTE* dst = (BYTE*)bitmap->plans[0] + dst_offset;
+
+    if (PLANAR)
+    {
+        ASSERT(0);
+        XY_LOG_FATAL("Not Supported yet");
+        return;
+    }
+    if (fSingleColor)
+    {
+        do_draw_single_color[fSSE2](dst, s, color, w, h, overlayPitch, bitmap->pitch);
+    }
+    else
+    {
+        const int MAX_COLOR_NUM = 4;
+        DWORD new_switchpts[MAX_COLOR_NUM*2];
+        new_switchpts[0] = switchpts[0];
+        new_switchpts[1] = 0;
+        int i=1;
+        for (;i<MAX_COLOR_NUM;i++)
+        {
+            new_switchpts[2*i] = switchpts[2*i];
+            new_switchpts[2*i+1] = switchpts[2*i+1] > xo ? switchpts[2*i+1] - xo : 0;
+            if (new_switchpts[2*i+1]>= w)
+            {
+                new_switchpts[2*i+1] = w;
+                break;
+            }
+        }
+        if (i==MAX_COLOR_NUM)
+        {
+            XY_LOG_WARN("Unexpected!");
+        }
+        do_draw_multi_color[fSSE2](dst, s, new_switchpts, w, h, overlayPitch, bitmap->pitch);
+    }
+    return;
+}
 
 ///////////////////////////////////////////////////////////////
 
 // Overlay
 
-void Overlay::_DoFillAlphaMash(byte* outputAlphaMask, const byte* pBody, const byte* pBorder, int x, int y, int w, int h, 
-    const byte* pAlphaMask, int pitch, DWORD color_alpha )
+void FillAlphaMashBody_c   (BYTE* dst, const BYTE* src, int color_alpha, int w, int h, int pitch);
+void FillAlphaMashBody_sse2(BYTE* dst, const BYTE* src, int color_alpha, int w, int h, int pitch);
+
+void FillAlphaMashBorder_c   (BYTE* dst, const BYTE* border, const BYTE* body, int color_alpha, int w, int h, int pitch);
+void FillAlphaMashBorder_sse2(BYTE* dst, const BYTE* border, const BYTE* body, int color_alpha, int w, int h, int pitch);
+
+void FillAlphaMashBodyMasked_c   (BYTE* dst, const BYTE* src, int color_alpha, int w, int h, int pitch,
+    const BYTE* am, int am_pitch);
+void FillAlphaMashBodyMasked_sse2(BYTE* dst, const BYTE* src, int color_alpha, int w, int h, int pitch,
+    const BYTE* am, int am_pitch);
+
+void FillAlphaMashBorderMasked_c   (BYTE* dst, const BYTE* border, const BYTE* body, int color_alpha, int w, int h, int pitch,
+    const BYTE* am, int am_pitch);
+void FillAlphaMashBorderMasked_sse2(BYTE* dst, const BYTE* border, const BYTE* body, int color_alpha, int w, int h, int pitch,
+    const BYTE* am, int am_pitch);
+
+void FillAlphaMashBody_c(BYTE* dst, const BYTE* src, int color_alpha, int w, int h, int pitch)
+{
+    while(h--)
+    {
+        int j=0;
+        for( ; j<w; j++ )
+        {
+            dst[j] = ((src[j] * color_alpha)+32)>>6;
+        }
+        src += pitch;
+        dst += pitch;
+    }
+}
+
+void FillAlphaMashBody_sse2(BYTE* dst, const BYTE* src, int color_alpha, int w, int h, int pitch)
 {
 #ifndef _WIN64
-    if (g_cpuid.m_flags & CCpuID::sse2)
+    const int ROUDN_ERR = 1<<(6-1);
+
+    const int x0 = ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) < w ?
+                   ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) : w; //IMPORTANT! Should not exceed w.
+    const int x00 = ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) < w ?
+                    ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) : w;//IMPORTANT! Should not exceed w.
+    const int x_end00  = ((reinterpret_cast<int>(dst)+w)&~15) - reinterpret_cast<int>(dst);
+    const int x_end0 = ((reinterpret_cast<int>(dst)+w)&~3) - reinterpret_cast<int>(dst);
+    const int x_end = w;
+    __m64   color_alpha_64  = _mm_set1_pi16 (color_alpha);
+    __m64   round_err_64    = _mm_set1_pi16 (ROUDN_ERR);
+    __m128i color_alpha_128 = _mm_set1_epi16(color_alpha);
+    __m128i round_err_128   = _mm_set1_epi16(ROUDN_ERR);
+    while(h--)
     {
-        pBody = pBody!=NULL ? pBody + y*mOverlayPitch + x: NULL;
-        pBorder = pBorder!=NULL ? pBorder + y*mOverlayPitch + x: NULL;
-        byte* dst = outputAlphaMask + y*mOverlayPitch + x;
-
-        const int x0 = ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) < w ?
-            ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) : w; //IMPORTANT! Should not exceed w.
-        const int x00 = ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) < w ?
-            ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) : w;//IMPORTANT! Should not exceed w.
-        const int x_end00  = ((reinterpret_cast<int>(dst)+w)&~15) - reinterpret_cast<int>(dst);
-        const int x_end0 = ((reinterpret_cast<int>(dst)+w)&~3) - reinterpret_cast<int>(dst);
-        const int x_end = w;
-
-        __m64 color_alpha_64 = _mm_set1_pi16(color_alpha);
-        __m128i color_alpha_128 = _mm_set1_epi16(color_alpha);
-
-        if(pAlphaMask==NULL && pBody!=NULL && pBorder!=NULL)
-        {       
-            /*
-            __asm
-            {
-            mov        eax, color_alpha
-            movd	   XMM3, eax
-            punpcklwd  XMM3, XMM3
-            pshufd	   XMM3, XMM3, 0
-            } 
-            */
-            while(h--)
-            {
-                int j=0;
-                for( ; j<x0; j++ )
-                {
-                    int temp = pBorder[j]-pBody[j];
-                    temp = temp<0 ? 0 : temp;
-                    dst[j] = (temp * color_alpha)>>6;
-                }
-                for( ;j<x00;j+=4 )
-                {
-                    __m64 border = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBorder+j));
-                    __m64 body = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBody+j));
-                    border = _mm_subs_pu8(border, body);                    
-                    __m64 zero = _mm_setzero_si64();
-                    border = _mm_unpacklo_pi8(border, zero);
-                    border = _mm_mullo_pi16(border, color_alpha_64);
-                    border = _mm_srli_pi16(border, 6);
-                    border = _mm_packs_pu16(border,border);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border);
-                }
-                __m128i zero = _mm_setzero_si128();
-                for( ;j<x_end00;j+=16)
-                {
-                    __m128i border = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pBorder+j));
-                    __m128i body = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pBody+j));
-                    border = _mm_subs_epu8(border,body);
-                    __m128i srchi = border;   
-                    border = _mm_unpacklo_epi8(border, zero);
-                    srchi = _mm_unpackhi_epi8(srchi, zero);
-                    border = _mm_mullo_epi16(border, color_alpha_128);
-                    srchi = _mm_mullo_epi16(srchi, color_alpha_128);
-                    border = _mm_srli_epi16(border, 6);
-                    srchi = _mm_srli_epi16(srchi, 6);
-                    border = _mm_packus_epi16(border, srchi);
-                    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), border);
-                }
-                for( ;j<x_end0;j+=4)
-                {
-                    __m64 border = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBorder+j));
-                    __m64 body = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBody+j));
-                    border = _mm_subs_pu8(border, body);                    
-                    __m64 zero = _mm_setzero_si64();
-                    border = _mm_unpacklo_pi8(border, zero);
-                    border = _mm_mullo_pi16(border, color_alpha_64);
-                    border = _mm_srli_pi16(border, 6);
-                    border = _mm_packs_pu16(border,border);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border);
-                }
-                for( ;j<x_end;j++)
-                {
-                    int temp = pBorder[j]-pBody[j];
-                    temp = temp<0 ? 0 : temp;
-                    dst[j] = (temp * color_alpha)>>6;
-                }
-                pBody += mOverlayPitch;
-                pBorder += mOverlayPitch;
-                //pAlphaMask += pitch;
-                dst += mOverlayPitch;
-            }
-        }
-        else if( ((pBody==NULL) + (pBorder==NULL))==1 && pAlphaMask==NULL)
+        int j=0;
+        for( ; j<x0; j++ )
         {
-            const BYTE* src1 = pBody!=NULL ? pBody : pBorder;
-            while(h--)
-            {
-                int j=0;
-                for( ; j<x0; j++ )
-                {
-                    dst[j] = (src1[j] * color_alpha)>>6;
-                }
-                for( ;j<x00;j+=4 )
-                {
-                    __m64 src = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src1+j));
-                    __m64 zero = _mm_setzero_si64();
-                    src = _mm_unpacklo_pi8(src, zero);
-                    src = _mm_mullo_pi16(src, color_alpha_64);
-                    src = _mm_srli_pi16(src, 6);
-                    src = _mm_packs_pu16(src,src);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src);
-                }
-                __m128i zero = _mm_setzero_si128();
-                for( ;j<x_end00;j+=16)
-                {
-                    __m128i src = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src1+j));
-                    __m128i srchi = src;
-                    src = _mm_unpacklo_epi8(src, zero);
-                    srchi = _mm_unpackhi_epi8(srchi, zero);
-                    src = _mm_mullo_epi16(src, color_alpha_128);
-                    srchi = _mm_mullo_epi16(srchi, color_alpha_128);
-                    src = _mm_srli_epi16(src, 6);
-                    srchi = _mm_srli_epi16(srchi, 6);
-                    src = _mm_packus_epi16(src, srchi);
-                    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), src);
-                }
-                for( ;j<x_end0;j+=4)
-                {
-                    __m64 src = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src1+j));
-                    __m64 zero = _mm_setzero_si64();
-                    src = _mm_unpacklo_pi8(src, zero);
-                    src = _mm_mullo_pi16(src, color_alpha_64);
-                    src = _mm_srli_pi16(src, 6);
-                    src = _mm_packs_pu16(src,src);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src);
-                }
-                for( ;j<x_end;j++)
-                {
-                    dst[j] = (src1[j] * color_alpha)>>6;
-                }
-                src1 += mOverlayPitch;
-                //pAlphaMask += pitch;
-                dst += mOverlayPitch;
-            }
+            dst[j] = ((src[j] * color_alpha)+ROUDN_ERR)>>6;
         }
-        else if( ((pBody==NULL) + (pBorder==NULL))==1 && pAlphaMask!=NULL)
+        for( ;j<x00;j+=4 )
         {
-            const BYTE* src1 = pBody!=NULL ? pBody : pBorder;
-            while(h--)
-            {
-                int j=0;
-                for( ; j<x0; j++ )
-                {
-                    dst[j] = (src1[j] * pAlphaMask[j] * color_alpha)>>12;
-                }
-                for( ;j<x00;j+=4 )
-                {
-                    __m64 src = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src1+j));
-                    __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pAlphaMask+j));
-                    __m64 zero = _mm_setzero_si64();
-                    src = _mm_unpacklo_pi8(src, zero);
-                    src = _mm_mullo_pi16(src, color_alpha_64);
-                    mask = _mm_unpacklo_pi8(zero, mask); //important!
-                    src = _mm_mulhi_pi16(src, mask); //important!
-                    src = _mm_srli_pi16(src, 12+8-16); //important!
-                    src = _mm_packs_pu16(src,src);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src);
-                }
-                __m128i zero = _mm_setzero_si128();
-                for( ;j<x_end00;j+=16)
-                {
-                    __m128i src = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src1+j));
-                    __m128i mask = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pAlphaMask+j));
-                    __m128i srchi = src;
-                    __m128i maskhi = mask;                 
-                    src = _mm_unpacklo_epi8(src, zero);
-                    srchi = _mm_unpackhi_epi8(srchi, zero);
-                    mask = _mm_unpacklo_epi8(zero, mask); //important!
-                    maskhi = _mm_unpackhi_epi8(zero, maskhi);
-                    src = _mm_mullo_epi16(src, color_alpha_128);
-                    srchi = _mm_mullo_epi16(srchi, color_alpha_128);
-                    src = _mm_mulhi_epu16(src, mask); //important!
-                    srchi = _mm_mulhi_epu16(srchi, maskhi);
-                    src = _mm_srli_epi16(src, 12+8-16); //important!
-                    srchi = _mm_srli_epi16(srchi, 12+8-16);
-                    src = _mm_packus_epi16(src, srchi);
-                    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), src);
-                }
-                for( ;j<x_end0;j+=4)
-                {
-                    __m64 src = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src1+j));
-                    __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pAlphaMask+j));
-                    __m64 zero = _mm_setzero_si64();
-                    src = _mm_unpacklo_pi8(src, zero);
-                    src = _mm_mullo_pi16(src, color_alpha_64);
-                    mask = _mm_unpacklo_pi8(zero, mask); //important!
-                    src = _mm_mulhi_pi16(src, mask); //important!
-                    src = _mm_srli_pi16(src, 12+8-16); //important!
-                    src = _mm_packs_pu16(src,src);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src);
-                }
-                for( ;j<x_end;j++)
-                {
-                    dst[j] = (src1[j] * pAlphaMask[j] * color_alpha)>>12;
-                }
-                src1 += mOverlayPitch;
-                pAlphaMask += pitch;
-                dst += mOverlayPitch;
-            }
+            __m64 src1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src+j));
+            __m64 zero = _mm_setzero_si64();
+            src1 = _mm_unpacklo_pi8(src1, zero);
+            src1 = _mm_mullo_pi16(src1, color_alpha_64);
+            src1 = _mm_adds_pu16(src1, round_err_64);
+            src1 = _mm_srli_pi16(src1, 6);
+            src1 = _mm_packs_pu16(src1,src1);
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src1);
         }
-        else if( pAlphaMask!=NULL && pBody!=NULL && pBorder!=NULL )
+        __m128i zero = _mm_setzero_si128();
+        for( ;j<x_end00;j+=16)
         {
-            while(h--)
-            {
-                int j=0;
-                for( ; j<x0; j++ )
-                {
-                    int temp = pBorder[j]-pBody[j];
-                    temp = temp<0 ? 0 : temp;
-                    dst[j] = (temp * pAlphaMask[j] * color_alpha)>>12;
-                }
-                for( ;j<x00;j+=4 )
-                {
-                    __m64 border = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBorder+j));
-                    __m64 body = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBody+j));
-                    border = _mm_subs_pu8(border, body);
-                    __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pAlphaMask+j));
-                    __m64 zero = _mm_setzero_si64();
-                    border = _mm_unpacklo_pi8(border, zero);
-                    border = _mm_mullo_pi16(border, color_alpha_64);
-                    mask = _mm_unpacklo_pi8(zero, mask); //important!
-                    border = _mm_mulhi_pi16(border, mask); //important!
-                    border = _mm_srli_pi16(border, 12+8-16); //important!
-                    border = _mm_packs_pu16(border,border);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border);
-                }
-                __m128i zero = _mm_setzero_si128();
-                for( ;j<x_end00;j+=16)
-                {
-                    __m128i border = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pBorder+j));
-                    __m128i body = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pBody+j));
-                    border = _mm_subs_epu8(border,body);
-
-                    __m128i mask = _mm_loadu_si128(reinterpret_cast<const __m128i*>(pAlphaMask+j));
-                    __m128i srchi = border;
-                    __m128i maskhi = mask;                 
-                    border = _mm_unpacklo_epi8(border, zero);
-                    srchi = _mm_unpackhi_epi8(srchi, zero);
-                    mask = _mm_unpacklo_epi8(zero, mask); //important!
-                    maskhi = _mm_unpackhi_epi8(zero, maskhi);
-                    border = _mm_mullo_epi16(border, color_alpha_128);
-                    srchi = _mm_mullo_epi16(srchi, color_alpha_128);
-                    border = _mm_mulhi_epu16(border, mask); //important!
-                    srchi = _mm_mulhi_epu16(srchi, maskhi);
-                    border = _mm_srli_epi16(border, 12+8-16); //important!
-                    srchi = _mm_srli_epi16(srchi, 12+8-16);
-                    border = _mm_packus_epi16(border, srchi);
-                    _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), border);
-                }
-                for( ;j<x_end0;j+=4)
-                {
-                    __m64 border = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBorder+j));
-                    __m64 body = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pBody+j));
-                    border = _mm_subs_pu8(border, body);
-                    __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(pAlphaMask+j));
-                    __m64 zero = _mm_setzero_si64();
-                    border = _mm_unpacklo_pi8(border, zero);
-                    border = _mm_mullo_pi16(border, color_alpha_64);
-                    mask = _mm_unpacklo_pi8(zero, mask); //important!
-                    border = _mm_mulhi_pi16(border, mask); //important!
-                    border = _mm_srli_pi16(border, 12+8-16); //important!
-                    border = _mm_packs_pu16(border,border);
-                    *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border);
-                }
-                for( ;j<x_end;j++)
-                {
-                    int temp = pBorder[j]-pBody[j];
-                    temp = temp<0 ? 0 : temp;
-                    dst[j] = (temp * pAlphaMask[j] * color_alpha)>>12;
-                }
-                pBody += mOverlayPitch;
-                pBorder += mOverlayPitch;
-                pAlphaMask += pitch;
-                dst += mOverlayPitch;
-            }
+            __m128i src1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src+j));
+            __m128i srchi = src1;
+            src1 = _mm_unpacklo_epi8(src1, zero);
+            srchi = _mm_unpackhi_epi8(srchi, zero);
+            src1 = _mm_mullo_epi16(src1, color_alpha_128);
+            srchi = _mm_mullo_epi16(srchi, color_alpha_128);
+            src1 = _mm_adds_epu16(src1, round_err_128);
+            src1 = _mm_srli_epi16(src1, 6);
+            srchi = _mm_adds_epu16(srchi, round_err_128);
+            srchi = _mm_srli_epi16(srchi, 6);
+            src1 = _mm_packus_epi16(src1, srchi);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), src1);
         }
-        else
+        for( ;j<x_end0;j+=4)
         {
-            //should NOT happen!
-            ASSERT(0);
-            while(h--)
-            {
-                for(int j=0;j<x_end;j++)
-                {
-                    dst[j] = 0;
-                }
-                dst += mOverlayPitch;
-            }
+            __m64 src1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src+j));
+            __m64 zero = _mm_setzero_si64();
+            src1 = _mm_unpacklo_pi8(src1, zero);
+            src1 = _mm_mullo_pi16(src1, color_alpha_64);
+            src1 = _mm_adds_pu16(src1, round_err_64);
+            src1 = _mm_srli_pi16(src1, 6);
+            src1 = _mm_packs_pu16(src1,src1);
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src1);
         }
-        _mm_empty();
+        for( ;j<x_end;j++)
+        {
+            dst[j] = ((src[j] * color_alpha)+ROUDN_ERR)>>6;
+        }
+        src += pitch;
+        dst += pitch;
     }
-    else
-    {
-        _DoFillAlphaMash_c(outputAlphaMask, pBody, pBorder, x, y, w, h, pAlphaMask, pitch, color_alpha);
-        return;
-    }
+    _mm_empty();
 #else
-    _DoFillAlphaMash_c(outputAlphaMask, pBody, pBorder, x, y, w, h, pAlphaMask, pitch, color_alpha);
-    return;
+    FillAlphaMashBody_c(dst, src, color_alpha, w, h, pitch);
 #endif
 }
 
-void Overlay::_DoFillAlphaMash_c(byte* outputAlphaMask, const byte* pBody, const byte* pBorder, int x, int y, int w, int h, 
-    const byte* pAlphaMask, int pitch, DWORD color_alpha )
+void FillAlphaMashBorder_c(BYTE* dst, const BYTE* border, const BYTE* body, int color_alpha, int w, int h, int pitch)
 {
-    pBody = pBody!=NULL ? pBody + y*mOverlayPitch + x: NULL;
-    pBorder = pBorder!=NULL ? pBorder + y*mOverlayPitch + x: NULL;
-    byte* dst = outputAlphaMask + y*mOverlayPitch + x;
+    while(h--)
+    {
+        int j=0;
+        for( ;j<w;j++)
+        {
+            int temp = border[j]-body[j];
+            temp = temp<0 ? 0 : temp;
+            dst[j] = ((temp * color_alpha)+32)>>6;
+        }
+        body   += pitch;
+        border += pitch;
+        dst    += pitch;
+    }
+}
 
-    if(pAlphaMask==NULL && pBody!=NULL && pBorder!=NULL)
+void FillAlphaMashBorder_sse2( BYTE* dst, const BYTE* border, const BYTE* body, int color_alpha, int w, int h, int pitch )
+{
+#ifndef _WIN64
+    const int ROUDN_ERR = 1<<(6-1);
+
+    const int x0 = ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) < w ?
+                   ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) : w; //IMPORTANT! Should not exceed w.
+    const int x00 = ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) < w ?
+                    ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) : w;//IMPORTANT! Should not exceed w.
+    const int x_end00  = ((reinterpret_cast<int>(dst)+w)&~15) - reinterpret_cast<int>(dst);
+    const int x_end0 = ((reinterpret_cast<int>(dst)+w)&~3) - reinterpret_cast<int>(dst);
+    const int x_end = w;
+    __m64   color_alpha_64  = _mm_set1_pi16 (color_alpha);
+    __m64   round_err_64    = _mm_set1_pi16 (ROUDN_ERR);
+    __m128i color_alpha_128 = _mm_set1_epi16(color_alpha);
+    __m128i round_err_128   = _mm_set1_epi16(ROUDN_ERR);
+    while(h--)
     {
-        while(h--)
+        int j=0;
+        for( ; j<x0; j++ )
         {
-            int j=0;
-            for( ;j<w;j++)
-            {
-                int temp = pBorder[j]-pBody[j];
-                temp = temp<0 ? 0 : temp;
-                dst[j] = (temp * color_alpha)>>6;
-            }
-            pBody += mOverlayPitch;
-            pBorder += mOverlayPitch;
-            //pAlphaMask += pitch;
-            dst += mOverlayPitch;
+            int temp = border[j]-body[j];
+            temp = temp<0 ? 0 : temp;
+            dst[j] = ((temp * color_alpha)+ROUDN_ERR)>>6;
         }
+        for( ;j<x00;j+=4 )
+        {
+            __m64 border1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(border+j));
+            __m64 body1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(body+j));
+            border1 = _mm_subs_pu8(border1, body1);
+            __m64 zero = _mm_setzero_si64();
+            border1 = _mm_unpacklo_pi8(border1, zero);
+            border1 = _mm_mullo_pi16(border1, color_alpha_64);
+            border1 = _mm_adds_pu16(border1, round_err_64);
+            border1 = _mm_srli_pi16(border1, 6);
+            border1 = _mm_packs_pu16(border1,border1);
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border1);
+        }
+        __m128i zero = _mm_setzero_si128();
+        for( ;j<x_end00;j+=16)
+        {
+            __m128i border1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(border+j));
+            __m128i body1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(body+j));
+            border1 = _mm_subs_epu8(border1,body1);
+            __m128i srchi = border1;   
+            border1 = _mm_unpacklo_epi8(border1, zero);
+            srchi   = _mm_unpackhi_epi8(srchi  , zero);
+            border1 = _mm_mullo_epi16(border1, color_alpha_128);
+            srchi   = _mm_mullo_epi16(srchi  , color_alpha_128);
+            border1 = _mm_adds_epu16(border1, round_err_128);
+            srchi   = _mm_adds_epu16(srchi  , round_err_128);
+            border1 = _mm_srli_epi16(border1, 6);
+            srchi   = _mm_srli_epi16(srchi  , 6);
+            border1 = _mm_packus_epi16(border1, srchi);
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), border1);
+        }
+        for( ;j<x_end0;j+=4)
+        {
+            __m64 border1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(border+j));
+            __m64 body1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(body+j));
+            border1 = _mm_subs_pu8(border1, body1);
+            __m64 zero = _mm_setzero_si64();
+            border1 = _mm_unpacklo_pi8(border1, zero);
+            border1 = _mm_mullo_pi16(border1, color_alpha_64);
+            border1 = _mm_adds_pu16(border1, round_err_64);
+            border1 = _mm_srli_pi16(border1, 6);
+            border1 = _mm_packs_pu16(border1,border1);
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border1);
+        }
+        for( ;j<x_end;j++)
+        {
+            int temp = border[j]-body[j];
+            temp = temp<0 ? 0 : temp;
+            dst[j] = ((temp * color_alpha)+ROUDN_ERR)>>6;
+        }
+        body  += pitch;
+        border += pitch;
+        dst    += pitch;
     }
-    else if( ((pBody==NULL) + (pBorder==NULL))==1 && pAlphaMask==NULL)
+    _mm_empty();
+#else
+    FillAlphaMashBorder_c(dst, border, body, color_alpha, w, h, pitch);
+#endif
+}
+
+void FillAlphaMashBodyMasked_c(       BYTE* dst        , 
+                                const BYTE* src        , 
+                                int         color_alpha, 
+                                int         w          , 
+                                int         h          , 
+                                int         pitch      , 
+                                const BYTE* am         , 
+                                int         am_pitch)
+{
+    const int ROUND_ERR = 1<<(12-1);
+    while(h--)
     {
-        const BYTE* src1 = pBody!=NULL ? pBody : pBorder;
-        while(h--)
+        int j=0;
+        for( ; j<w; j++ )
         {
-            int j=0;
-            for( ; j<w; j++ )
-            {
-                dst[j] = (src1[j] * color_alpha)>>6;
-            }
-            src1 += mOverlayPitch;
-            //pAlphaMask += pitch;
-            dst += mOverlayPitch;
+            dst[j] = ((src[j] * am[j] * color_alpha)+ROUND_ERR)>>12;
         }
+        src += pitch;
+        am  += am_pitch;
+        dst += pitch;
     }
-    else if( ((pBody==NULL) + (pBorder==NULL))==1 && pAlphaMask!=NULL)
+}
+
+void FillAlphaMashBodyMasked_sse2(       BYTE* dst        , 
+                                   const BYTE* src        , 
+                                   int         color_alpha, 
+                                   int         w          , 
+                                   int         h          , 
+                                   int         pitch      , 
+                                   const BYTE* am         , 
+                                   int         am_pitch)
+{
+#ifndef _WIN64
+    const int ROUND_ERR = 1<<(12-1);
+
+    const int x0 = ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) < w ?
+                   ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) : w; //IMPORTANT! Should not exceed w.
+    const int x00 = ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) < w ?
+                    ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) : w;//IMPORTANT! Should not exceed w.
+    const int x_end00  = ((reinterpret_cast<int>(dst)+w)&~15) - reinterpret_cast<int>(dst);
+    const int x_end0 = ((reinterpret_cast<int>(dst)+w)&~3) - reinterpret_cast<int>(dst);
+    const int x_end = w;
+    __m64   color_alpha_64  = _mm_set1_pi16 (color_alpha);
+    __m64   round_err_64    = _mm_set1_pi16 (ROUND_ERR>>8);//important!
+    __m128i color_alpha_128 = _mm_set1_epi16(color_alpha);
+    __m128i round_err_128   = _mm_set1_epi16(ROUND_ERR>>8);//important!
+    while(h--)
     {
-        const BYTE* src1 = pBody!=NULL ? pBody : pBorder;
-        while(h--)
+        int j=0;
+        for( ; j<x0; j++ )
         {
-            int j=0;
-            for( ; j<w; j++ )
-            {
-                dst[j] = (src1[j] * pAlphaMask[j] * color_alpha)>>12;
-            }
-            src1 += mOverlayPitch;
-            pAlphaMask += pitch;
-            dst += mOverlayPitch;
+            dst[j] = ((src[j] * am[j] * color_alpha)+ROUND_ERR)>>12;
         }
+        for( ;j<x00;j+=4 )
+        {
+            __m64 src1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src+j));
+            __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(am+j));
+            __m64 zero = _mm_setzero_si64();
+            src1 = _mm_unpacklo_pi8(src1, zero);
+            src1 = _mm_mullo_pi16(src1, color_alpha_64);
+            mask = _mm_unpacklo_pi8(zero, mask); //important!
+            src1 = _mm_mulhi_pi16(src1, mask); //important!
+            src1 = _mm_adds_pu16(src1, round_err_64);
+            src1 = _mm_srli_pi16(src1, 12+8-16); //important!
+            src1 = _mm_packs_pu16(src1,src1);
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src1);
+        }
+        __m128i zero = _mm_setzero_si128();
+        for( ;j<x_end00;j+=16)
+        {
+            __m128i src1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(src+j));
+            __m128i mask = _mm_loadu_si128(reinterpret_cast<const __m128i*>(am+j));
+            __m128i src1hi = src1;
+            __m128i maskhi = mask;
+
+            src1   = _mm_unpacklo_epi8(src1  , zero           );
+            src1hi = _mm_unpackhi_epi8(src1hi, zero           );
+            mask   = _mm_unpacklo_epi8(zero  , mask           ); //important!
+            maskhi = _mm_unpackhi_epi8(zero  , maskhi         );
+            src1   = _mm_mullo_epi16  (src1  , color_alpha_128);
+            src1hi = _mm_mullo_epi16  (src1hi, color_alpha_128);
+            src1   = _mm_mulhi_epu16  (src1  , mask           ); //important!
+            src1hi = _mm_mulhi_epu16  (src1hi, maskhi         );
+            src1   = _mm_adds_epu16   (src1  , round_err_128  );
+            src1hi = _mm_adds_epu16   (src1hi, round_err_128  );
+            src1   = _mm_srli_epi16   (src1  , 12+8-16        ); //important!
+            src1hi = _mm_srli_epi16   (src1hi, 12+8-16        );
+            src1   = _mm_packus_epi16 (src1  , src1hi         );
+
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), src1);
+        }
+        for( ;j<x_end0;j+=4)
+        {
+            __m64 src1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(src+j));
+            __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(am+j));
+            __m64 zero = _mm_setzero_si64();
+            src1 = _mm_unpacklo_pi8(src1, zero);
+            src1 = _mm_mullo_pi16(src1, color_alpha_64);
+            mask = _mm_unpacklo_pi8(zero, mask); //important!
+            src1 = _mm_mulhi_pi16(src1, mask); //important!
+            src1 = _mm_adds_pu16(src1, round_err_64);
+            src1 = _mm_srli_pi16(src1, 12+8-16); //important!
+            src1 = _mm_packs_pu16(src1,src1);
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(src1);
+        }
+        for( ;j<x_end;j++)
+        {
+            dst[j] = ((src[j] * am[j] * color_alpha)+ROUND_ERR)>>12;
+        }
+        src += pitch;
+        am  += am_pitch;
+        dst += pitch;
     }
-    else if( pAlphaMask!=NULL && pBody!=NULL && pBorder!=NULL )
+    _mm_empty();
+#else
+    FillAlphaMashBodyMasked_c(dst, src, color_alpha, w, h, pitch, am, am_pitch);
+#endif
+}
+
+void FillAlphaMashBorderMasked_c(       BYTE* dst        , 
+                                  const BYTE* border     , 
+                                  const BYTE* body       ,
+                                  int         color_alpha, 
+                                  int         w          , 
+                                  int         h          , 
+                                  int         pitch      , 
+                                  const BYTE* am         , 
+                                  int         am_pitch)
+{
+    const int ROUND_ERR = 1<<(12-1);
+    while(h--)
     {
-        while(h--)
+        int j=0;
+        for( ; j<w; j++ )
         {
-            int j=0;
-            for( ; j<w; j++ )
-            {
-                int temp = pBorder[j]-pBody[j];
-                temp = temp<0 ? 0 : temp;
-                dst[j] = (temp * pAlphaMask[j] * color_alpha)>>12;
-            }
-            pBody += mOverlayPitch;
-            pBorder += mOverlayPitch;
-            pAlphaMask += pitch;
-            dst += mOverlayPitch;
+            int temp = border[j]-body[j];
+            temp = temp<0 ? 0 : temp;
+            dst[j] = ((temp * am[j] * color_alpha)+ROUND_ERR)>>12;
         }
+        body   += pitch;
+        border += pitch;
+        am     += am_pitch;
+        dst    += pitch;
     }
-    else
+}
+
+void FillAlphaMashBorderMasked_sse2(       BYTE* dst        , 
+                                     const BYTE* border     , 
+                                     const BYTE* body       ,
+                                     int         color_alpha, 
+                                     int         w          , 
+                                     int         h          , 
+                                     int         pitch      , 
+                                     const BYTE* am         , 
+                                     int         am_pitch)
+{
+#ifndef _WIN64
+    const int ROUND_ERR = 1<<(12-1);
+
+    const int x0 = ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) < w ?
+                   ((reinterpret_cast<int>(dst)+3)&~3) - reinterpret_cast<int>(dst) : w; //IMPORTANT! Should not exceed w.
+    const int x00 = ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) < w ?
+                    ((reinterpret_cast<int>(dst)+15)&~15) - reinterpret_cast<int>(dst) : w;//IMPORTANT! Should not exceed w.
+    const int x_end00  = ((reinterpret_cast<int>(dst)+w)&~15) - reinterpret_cast<int>(dst);
+    const int x_end0 = ((reinterpret_cast<int>(dst)+w)&~3) - reinterpret_cast<int>(dst);
+    const int x_end = w;
+    __m64   color_alpha_64  = _mm_set1_pi16 (color_alpha);
+    __m64   round_err_64    = _mm_set1_pi16 (ROUND_ERR>>8);//important!
+    __m128i color_alpha_128 = _mm_set1_epi16(color_alpha);
+    __m128i round_err_128   = _mm_set1_epi16(ROUND_ERR>>8);//important!
+    while(h--)
     {
-        //should NOT happen!
-        ASSERT(0);
-        while(h--)
+        int j=0;
+        for( ; j<x0; j++ )
         {
-            for(int j=0;j<w;j++)
-            {
-                dst[j] = 0;
-            }
-            dst += mOverlayPitch;
+            int temp = border[j]-body[j];
+            temp = temp<0 ? 0 : temp;
+            dst[j] = ((temp * am[j] * color_alpha)+ROUND_ERR)>>12;
         }
+        for( ;j<x00;j+=4 )
+        {
+            __m64 border1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(border+j));
+            __m64 body1   = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(body  +j));
+            border1 = _mm_subs_pu8(border1, body1);
+            __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(am+j));
+            __m64 zero = _mm_setzero_si64();
+            border1 = _mm_unpacklo_pi8(border1, zero          );
+            border1 = _mm_mullo_pi16  (border1, color_alpha_64);
+            mask    = _mm_unpacklo_pi8(zero   , mask          ); //important!
+            border1 = _mm_mulhi_pi16  (border1, mask          ); //important!
+            border1 = _mm_adds_pu16   (border1, round_err_64  );
+            border1 = _mm_srli_pi16   (border1, 12+8-16       ); //important!
+            border1 = _mm_packs_pu16  (border1, border1       );
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border1);
+        }
+        __m128i zero = _mm_setzero_si128();
+        for( ;j<x_end00;j+=16)
+        {
+            __m128i border1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(border+j));
+            __m128i body1 = _mm_loadu_si128(reinterpret_cast<const __m128i*>(body+j));
+            border1 = _mm_subs_epu8(border1,body1);
+
+            __m128i mask = _mm_loadu_si128(reinterpret_cast<const __m128i*>(am+j));
+            __m128i srchi = border1;
+            __m128i maskhi = mask;
+
+            border1 = _mm_unpacklo_epi8(border1, zero           );
+            srchi   = _mm_unpackhi_epi8(srchi  , zero           );
+            mask    = _mm_unpacklo_epi8(zero   , mask           ); //important!
+            maskhi  = _mm_unpackhi_epi8(zero   , maskhi         );
+            border1 = _mm_mullo_epi16  (border1, color_alpha_128);
+            srchi   = _mm_mullo_epi16  (srchi  , color_alpha_128);
+            border1 = _mm_mulhi_epu16  (border1, mask           ); //important!
+            srchi   = _mm_mulhi_epu16  (srchi  , maskhi         );
+            border1 = _mm_adds_epu16   (border1, round_err_128  );
+            srchi   = _mm_adds_epu16   (srchi  , round_err_128  );
+            border1 = _mm_srli_epi16   (border1, 12+8-16        ); //important!
+            srchi   = _mm_srli_epi16   (srchi  , 12+8-16        );
+            border1 = _mm_packus_epi16 (border1, srchi          );
+
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(dst+j), border1);
+        }
+        for( ;j<x_end0;j+=4)
+        {
+            __m64 border1 = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(border+j));
+            __m64 body1   = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(body  +j));
+            border1 = _mm_subs_pu8(border1, body1);
+            __m64 mask = _mm_cvtsi32_si64(*reinterpret_cast<const int*>(am+j));
+            __m64 zero = _mm_setzero_si64();
+            border1 = _mm_unpacklo_pi8(border1, zero          );
+            border1 = _mm_mullo_pi16  (border1, color_alpha_64);
+            mask    = _mm_unpacklo_pi8(zero   , mask          ); //important!
+            border1 = _mm_mulhi_pi16  (border1, mask          ); //important!
+            border1 = _mm_adds_pu16   (border1, round_err_64  );
+            border1 = _mm_srli_pi16   (border1, 12+8-16       ); //important!
+            border1 = _mm_packs_pu16  (border1, border1       );
+            *reinterpret_cast<int*>(dst+j) = _mm_cvtsi64_si32(border1);
+        }
+        for( ;j<x_end;j++)
+        {
+            int temp = border[j]-body[j];
+            temp = temp<0 ? 0 : temp;
+            dst[j] = ((temp * am[j] * color_alpha)+ROUND_ERR)>>12;
+        }
+        body   += pitch;
+        border += pitch;
+        am     += am_pitch;
+        dst    += pitch;
     }
+    _mm_empty();
+#else
+    FillAlphaMashBorderMasked_c(dst, border, body, color_alpha,w,h,pitch,am,am_pitch);
+#endif
 }
 
 void Overlay::FillAlphaMash( byte* outputAlphaMask, bool fBody, bool fBorder, int x, int y, int w, int h, const byte* pAlphaMask, int pitch, DWORD color_alpha)
 {
-    if(!fBorder && fBody && pAlphaMask==NULL)
+    const BYTE * body = mBody.get();
+    const BYTE * border = mBorder.get();
+    body   = body  !=NULL ? body   + y*mOverlayPitch + x: NULL;
+    border = border!=NULL ? border + y*mOverlayPitch + x: NULL;
+    byte* dst = outputAlphaMask + y*mOverlayPitch + x;
+
+    if (g_cpuid.m_flags & CCpuID::sse2)
     {
-        _DoFillAlphaMash(outputAlphaMask, mBody.get(), NULL, x, y, w, h, pAlphaMask, pitch, color_alpha);        
-    }
-    else if(/*fBorder &&*/ fBody && pAlphaMask==NULL)
-    {
-        _DoFillAlphaMash(outputAlphaMask, NULL, mBorder.get(), x, y, w, h, pAlphaMask, pitch, color_alpha);        
-    }
-    else if(!fBody && fBorder /* pAlphaMask==NULL or not*/)
-    {
-        _DoFillAlphaMash(outputAlphaMask, mBody.get(), mBorder.get(), x, y, w, h, pAlphaMask, pitch, color_alpha);        
-    }
-    else if(!fBorder && fBody && pAlphaMask!=NULL)
-    {
-        _DoFillAlphaMash(outputAlphaMask, mBody.get(), NULL, x, y, w, h, pAlphaMask, pitch, color_alpha);        
-    }
-    else if(fBorder && fBody && pAlphaMask!=NULL)
-    {
-        _DoFillAlphaMash(outputAlphaMask, NULL, mBorder.get(), x, y, w, h, pAlphaMask, pitch, color_alpha);        
+        if(!fBorder && fBody && pAlphaMask==NULL)
+        {
+            FillAlphaMashBody_sse2(dst, body, color_alpha, w, h, mOverlayPitch);
+        }
+        else if(fBorder && fBody && pAlphaMask==NULL)
+        {
+            FillAlphaMashBody_sse2(dst, border, color_alpha, w, h, mOverlayPitch);
+        }
+        else if(fBorder && !fBody && pAlphaMask==NULL)
+        {
+            FillAlphaMashBorder_sse2(dst, border, body, color_alpha, w, h, mOverlayPitch);
+        }
+        else if(!fBorder && fBody && pAlphaMask!=NULL)
+        {
+            FillAlphaMashBodyMasked_sse2(dst, body, color_alpha, w, h, mOverlayPitch, pAlphaMask, pitch);
+        }
+        else if(fBorder && fBody && pAlphaMask!=NULL)
+        {
+            FillAlphaMashBodyMasked_sse2(dst, border, color_alpha, w, h, mOverlayPitch, pAlphaMask, pitch);
+        }
+        else if(fBorder && !fBody && pAlphaMask!=NULL)
+        {
+            FillAlphaMashBorderMasked_sse2(dst, border, body, color_alpha, w, h, mOverlayPitch, pAlphaMask, pitch);
+        }
+        else
+        {
+            //should NOT happen
+            ASSERT(0);
+            XY_LOG_FATAL("Unexpected!");
+        }
     }
     else
     {
-        //should NOT happen
-        ASSERT(0);
+        if(!fBorder && fBody && pAlphaMask==NULL)
+        {
+            FillAlphaMashBody_c(dst, body, color_alpha, w, h, mOverlayPitch);
+        }
+        else if(fBorder && fBody && pAlphaMask==NULL)
+        {
+            FillAlphaMashBody_c(dst, border, color_alpha, w, h, mOverlayPitch);
+        }
+        else if(fBorder && !fBody && pAlphaMask==NULL)
+        {
+            FillAlphaMashBorder_c(dst, border, body, color_alpha, w, h, mOverlayPitch);
+        }
+        else if(!fBorder && fBody && pAlphaMask!=NULL)
+        {
+            FillAlphaMashBodyMasked_c(dst, body, color_alpha, w, h, mOverlayPitch, pAlphaMask, pitch);
+        }
+        else if(fBorder && fBody && pAlphaMask!=NULL)
+        {
+            FillAlphaMashBodyMasked_c(dst, border, color_alpha, w, h, mOverlayPitch, pAlphaMask, pitch);
+        }
+        else if(fBorder && !fBody && pAlphaMask!=NULL)
+        {
+            FillAlphaMashBorderMasked_c(dst, border, body, color_alpha, w, h, mOverlayPitch, pAlphaMask, pitch);
+        }
+        else
+        {
+            //should NOT happen
+            ASSERT(0);
+            XY_LOG_FATAL("Unexpected!");
+        }
     }
 }
 
 Overlay* Overlay::GetSubpixelVariance(unsigned int xshift, unsigned int yshift)
 {
-    Overlay* overlay = new Overlay();
+    Overlay* overlay = DEBUG_NEW Overlay();
     if(!overlay)
     {
         return NULL;
@@ -2687,8 +3146,8 @@ bool PathData::PartialEndPath(HDC hdc, long dx, long dy)
             mpPathTypes = pNewTypes;
         if(pNewPoints)
             mpPathPoints = pNewPoints;
-        BYTE* pTypes = new BYTE[nPoints];
-        POINT* pPoints = new POINT[nPoints];
+        BYTE* pTypes = DEBUG_NEW BYTE[nPoints];
+        POINT* pPoints = DEBUG_NEW POINT[nPoints];
         if(pNewTypes && pNewPoints && nPoints == GetPath(hdc, pPoints, pTypes, nPoints))
         {
             for(int i = 0; i < nPoints; ++i)
@@ -2759,7 +3218,7 @@ ScanLineData::~ScanLineData()
 {    
 }
 
-void ScanLineData::_ReallocEdgeBuffer(int edges)
+void ScanLineData::_ReallocEdgeBuffer(unsigned edges)
 {
     mEdgeHeapSize = edges;
     mpEdgeBuffer = (Edge*)realloc(mpEdgeBuffer, sizeof(Edge)*edges);
@@ -2859,54 +3318,50 @@ void ScanLineData::_EvaluateLine(int x0, int y0, int x1, int y1)
     if(!fFirstSet) {firstp.x = x0; firstp.y = y0; fFirstSet = true;}
     lastp.x = x1;
     lastp.y = y1;
-    if(y1 > y0)	// down
-    {
-        __int64 xacc = (__int64)x0 << 13;
-        // prestep y0 down
-        int dy = y1 - y0;
-        int y = ((y0 + 3)&~7) + 4;
-        int iy = y >> 3;
-        y1 = (y1 - 5) >> 3;
-        if(iy <= y1)
-        {
-            __int64 invslope = (__int64(x1 - x0) << 16) / dy;
-            while(mEdgeNext + y1 + 1 - iy > mEdgeHeapSize)
-                _ReallocEdgeBuffer(mEdgeHeapSize*2);
-            xacc += (invslope * (y - y0)) >> 3;
-            while(iy <= y1)
-            {
-                int ix = (int)((xacc + 32768) >> 16);
-                mpEdgeBuffer[mEdgeNext].next = mpScanBuffer[iy];
-                mpEdgeBuffer[mEdgeNext].posandflag = ix*2 + 1;
-                mpScanBuffer[iy] = mEdgeNext++;
-                ++iy;
-                xacc += invslope;
-            }
-        }
+
+    if (y1 > y0) {
+        _EvaluateLine<LINE_UP>(x0, y0, x1, y1);
+    } else if (y1 < y0) {
+        _EvaluateLine<LINE_DOWN>(x1, y1, x0, y0);
     }
-    else if(y1 < y0) // up
-    {
-        __int64 xacc = (__int64)x1 << 13;
-        // prestep y1 down
-        int dy = y0 - y1;
-        int y = ((y1 + 3)&~7) + 4;
-        int iy = y >> 3;
-        y0 = (y0 - 5) >> 3;
-        if(iy <= y0)
-        {
-            __int64 invslope = (__int64(x0 - x1) << 16) / dy;
-            while(mEdgeNext + y0 + 1 - iy > mEdgeHeapSize)
-                _ReallocEdgeBuffer(mEdgeHeapSize*2);
-            xacc += (invslope * (y - y1)) >> 3;
-            while(iy <= y0)
-            {
-                int ix = (int)((xacc + 32768) >> 16);
-                mpEdgeBuffer[mEdgeNext].next = mpScanBuffer[iy];
-                mpEdgeBuffer[mEdgeNext].posandflag = ix*2;
-                mpScanBuffer[iy] = mEdgeNext++;
-                ++iy;
-                xacc += invslope;
+}
+
+template<int flag>
+void ScanLineData::_EvaluateLine(int x0, int y0, int x1, int y1)
+{
+    __int64 xacc = (__int64)x0 << 13;
+
+    // prestep
+
+    int dy = y1 - y0;
+    int y = ((y0 + 3) & ~7) + 4;
+    int iy = y >> 3;
+
+    y1 = (y1 - 5) >> 3;
+
+    if (iy <= y1) {
+        __int64 invslope = (__int64(x1 - x0) << 16) / dy;
+
+        if (mEdgeNext + y1 + 1 - iy > mEdgeHeapSize) {
+            unsigned int new_edge_heap_size = mEdgeHeapSize * 2;
+            while (mEdgeNext + y1 + 1 - iy > new_edge_heap_size) {
+                new_edge_heap_size *= 2;
             }
+            _ReallocEdgeBuffer(new_edge_heap_size);
+        }
+
+        xacc += (invslope * (y - y0)) >> 3;
+
+        while (iy <= y1) {
+            int ix = (int)((xacc + 32768) >> 16);
+
+            mpEdgeBuffer[mEdgeNext].next = mpScanBuffer[iy];
+            mpEdgeBuffer[mEdgeNext].posandflag = (ix << 1) | flag;
+
+            mpScanBuffer[iy] = mEdgeNext++;
+
+            ++iy;
+            xacc += invslope;
         }
     }
 }
@@ -2930,12 +3385,7 @@ bool ScanLineData::ScanConvert(const PathData& path_data, const CSize& size)
     mEdgeHeapSize = 2048;
     mpEdgeBuffer = (Edge*)malloc(sizeof(Edge)*mEdgeHeapSize);
     // Initialize scanline list.
-    mpScanBuffer = new (std::nothrow) unsigned int[mHeight];
-    if (!mpScanBuffer) {
-        TRACE(_T("Error in ScanLineData::ScanConvert: mpScanBuffer is NULL"));
-        return false;
-    }
-
+    mpScanBuffer = DEBUG_NEW unsigned int[mHeight];
     memset(mpScanBuffer, 0, mHeight*sizeof(unsigned int));
     // Scan convert the outline.  Yuck, Bezier curves....
     // Unfortunately, Windows 95/98 GDI has a bad habit of giving us text

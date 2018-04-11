@@ -24,31 +24,62 @@
 #include "..\subpic\ISubPic.h"
 
 //
-// CSubtitleInputPin
+// CSubtitleInputPinHelper
+//
+class CSubtitleInputPinHelper
+{
+public:
+    virtual ~CSubtitleInputPinHelper(){}
+    STDMETHOD (NewSegment)(REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate) = 0;
+    STDMETHOD (Receive)(IMediaSample* pSample) = 0;
+    STDMETHOD (EndOfStream)(void) = 0;
+
+    STDMETHOD_(ISubStream*, GetSubStream) () = 0;
+};
+
+//
+// CSubtitleInputPinHelperImpl
 //
 
+class CSubtitleInputPinHelperImpl: public CSubtitleInputPinHelper
+{
+public:
+    CSubtitleInputPinHelperImpl(CComPtr<ISubStream> pSubStream) : m_pSubStream(pSubStream){}
+
+    STDMETHODIMP NewSegment(REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate);
+    STDMETHODIMP_(ISubStream*) GetSubStream() { return m_pSubStream; }
+    STDMETHODIMP EndOfStream(void) { return S_FALSE; }
+protected:
+    CComPtr<ISubStream> m_pSubStream;
+    REFERENCE_TIME m_tStart, m_tStop;
+    double m_dRate;
+};
+
+//
+// CSubtitleInputPin
+//
 class CSubtitleInputPin : public CBaseInputPin
 {
-	CCritSec m_csReceive;
-
-	CCritSec* m_pSubLock;
-	CComPtr<ISubStream> m_pSubStream;
-
 protected:
-	virtual void AddSubStream(ISubStream* pSubStream) = 0;
-	virtual void RemoveSubStream(ISubStream* pSubStream) = 0;
-	virtual void InvalidateSubtitle(REFERENCE_TIME rtStart, ISubStream* pSubStream) = 0;
-	bool		 IsHdmvSub(const CMediaType* pmt);
+    CCritSec* m_pSubLock;
+    CSubtitleInputPinHelper *m_helper;
+protected:
+    virtual void AddSubStream(ISubStream* pSubStream) = 0;
+    virtual void RemoveSubStream(ISubStream* pSubStream) = 0;
+    virtual void InvalidateSubtitle(REFERENCE_TIME rtStart, ISubStream* pSubStream) = 0;
 
+    STDMETHOD_(CSubtitleInputPinHelper*, CreateHelper) ( const CMediaType& mt, IPin* pReceivePin );
+    bool IsHdmvSub(const CMediaType* pmt);
 public:
-	CSubtitleInputPin(CBaseFilter* pFilter, CCritSec* pLock, CCritSec* pSubLock, HRESULT* phr);
+    CSubtitleInputPin(CBaseFilter* pFilter, CCritSec* pLock, CCritSec* pSubLock, HRESULT* phr);
 
-	HRESULT CheckMediaType(const CMediaType* pmt);
-	HRESULT CompleteConnect(IPin* pReceivePin);
-	HRESULT BreakConnect();
-	STDMETHODIMP ReceiveConnection(IPin* pConnector, const AM_MEDIA_TYPE* pmt);
-	STDMETHODIMP NewSegment(REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate);
-	STDMETHODIMP Receive(IMediaSample* pSample);
+    HRESULT CheckMediaType(const CMediaType* pmt);
+    HRESULT CompleteConnect(IPin* pReceivePin);
+    HRESULT BreakConnect();
+    STDMETHODIMP ReceiveConnection(IPin* pConnector, const AM_MEDIA_TYPE* pmt);
+    STDMETHODIMP NewSegment(REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate);
+    STDMETHODIMP Receive(IMediaSample* pSample);
+    STDMETHODIMP EndOfStream(void);
 
-	ISubStream* GetSubStream() {return m_pSubStream;}
+    ISubStream* GetSubStream();
 };

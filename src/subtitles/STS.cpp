@@ -1,5 +1,6 @@
 /*
- *  Copyright (C) 2003-2006 Gabest
+ *  (C) 2003-2006 Gabest
+ *  (C) 2006-2013 see Authors.txt 
  *  http://www.gabest.org
  *
  *  This Program is free software; you can redistribute it and/or modify
@@ -32,9 +33,19 @@
 #include <vector>
 #include "xy_logger.h"
 
+#if ENABLE_XY_LOG_TEXT_SUBTITLE
+#  define TRACE_SUB(msg) XY_LOG_TRACE(msg)
+#else
+#  define TRACE_SUB(msg) __noop
+#endif
+
+#ifndef ReftimeToCString
+#  define  ReftimeToCString(rt) ReftimeToString(rt).GetString()
+#endif
+
 // gathered from http://www.netwave.or.jp/~shikai/shikai/shcolor.htm
 
-static struct htmlcolor {TCHAR* name; DWORD color;} hmtlcolors[] =
+static struct htmlcolor {TCHAR* name; DWORD color;} htmlcolors[] =
 {
     {_T("white"), 0xffffff},
     {_T("whitesmoke"), 0xf5f5f5},
@@ -184,8 +195,8 @@ static struct htmlcolor {TCHAR* name; DWORD color;} hmtlcolors[] =
 
 CHtmlColorMap::CHtmlColorMap()
 {
-    for(int i = 0; i < countof(hmtlcolors); i++)
-        SetAt(hmtlcolors[i].name, hmtlcolors[i].color);
+    for(int i = 0; i < countof(htmlcolors); i++)
+        SetAt(htmlcolors[i].name, htmlcolors[i].color);
 }
 
 CHtmlColorMap g_colors;
@@ -246,21 +257,32 @@ int CharSetLen = countof(CharSetList);
 
 static void LogSegments(const CAtlArray<STSSegment>& segments)
 {
-#ifdef __DO_LOG
-    for (int i=0;i<segments.GetCount();i++)
+#if ENABLE_XY_LOG_TEXT_SUBTITLE
+    for (int i=0, n=segments.GetCount();i<n;i++)
     {
         const STSSegment& s = segments[i];
-        XY_LOG_INFO(_T("\tsegments ")<<i<<_T(":")<<s.start<<_T(" ")
+        TRACE_SUB(_T("\tsegments ")<<i<<_T(":")<<s.start<<_T(" ")
             <<s.end<<_T(" ")<<s.subs.GetCount());
-        XY_LOG_INFO(_T("\tsubs: "));
-        for (int j=0;j<s.subs.GetCount();j++)
+        TRACE_SUB(_T("\tsubs: "));
+        for (int j=0, m=s.subs.GetCount();j<m;j++)
         {
-            XY_LOG_INFO(_T("\t\t ")<<s.subs[j]);
+            TRACE_SUB(_T("\t\t ")<<s.subs[j]);
         }
     }
 #endif
 }
 
+static void LogStyles(const CSTSStyleMap& styles)
+{
+#if ENABLE_XY_LOG_TEXT_SUBTITLE
+    TRACE_SUB("m_styles count:"<<styles.GetCount());
+
+    for(POSITION pos=styles.GetStartPosition(); pos!=NULL;)
+    {
+        TRACE_SUB("\tm_styles["<<styles.GetNextKey(pos)<<"]");
+    }
+#endif
+}
 //
 
 static DWORD CharSetToCodePage(DWORD dwCharSet)
@@ -306,14 +328,7 @@ static int FindChar(CStringW str, WCHAR c, int pos, bool fUnicode, int CharSet)
 
     return(-1);
 }
-/*
-int FindChar(CStringA str, char c, int pos, bool fUnicode, int CharSet)
-{
-    ASSERT(!fUnicode);
 
-    return(FindChar(AToW(str), c, pos, false, CharSet));
-}
-*/
 static CStringW ToMBCS(CStringW str, DWORD CharSet)
 {
     CStringW ret;
@@ -508,39 +523,45 @@ static CStringW SubRipper2SSA(CStringW str, int CharSet)
 
 static bool OpenSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
 {
-    int num = 0;
-
     CStringW buff;
-    while(file->ReadString(buff))
-    {
-        buff.Trim();
-        if(buff.IsEmpty()) continue;
+    while (file->ReadString(buff)) {
+        FastTrim(buff);
+        if (buff.IsEmpty()) {
+            continue;
+        }
 
         WCHAR sep;
+        int num = 0; // This one isn't really used just assigned a new value
         int hh1, mm1, ss1, ms1, hh2, mm2, ss2, ms2;
-        int c = swscanf(buff, L"%d%c%d%c%d%c%d --> %d%c%d%c%d%c%d\n",
-            &hh1, &sep, &mm1, &sep, &ss1, &sep, &ms1,
-            &hh2, &sep, &mm2, &sep, &ss2, &sep, &ms2);
+        WCHAR msStr1[5] = {0}, msStr2[5] = {0};
+        int c = swscanf_s(buff, L"%d%c%d%c%d%4[^-] --> %d%c%d%c%d%4s\n",
+                          &hh1, &sep, 1, &mm1, &sep, 1, &ss1, msStr1, _countof(msStr1),
+                          &hh2, &sep, 1, &mm2, &sep, 1, &ss2, msStr2, _countof(msStr2));
 
-        if(c == 1) // numbering
-        {
+        if (c == 1) { // numbering
             num = hh1;
-        }
-        else if(c == 14) // time info
-        {
+        } else if (c >= 11) { // time info
+            // Parse ms if present
+            if (2 != swscanf_s(msStr1, L"%c%d", &sep, 1, &ms1)) {
+                ms1 = 0;
+            }
+            if (2 != swscanf_s(msStr2, L"%c%d", &sep, 1, &ms2)) {
+                ms2 = 0;
+            }
+
             CStringW str, tmp;
 
             bool fFoundEmpty = false;
 
-            while(file->ReadString(tmp))
-            {
-                tmp.Trim();
-                if(tmp.IsEmpty()) fFoundEmpty = true;
+            while (file->ReadString(tmp)) {
+                FastTrim(tmp);
+                if (tmp.IsEmpty()) {
+                    fFoundEmpty = true;
+                }
 
                 int num2;
-                WCHAR c;
-                if(swscanf(tmp, L"%d%c", &num2, &c) == 1 && fFoundEmpty)
-                {
+                WCHAR wc;
+                if (swscanf_s(tmp, L"%d%c", &num2, &wc, 1) == 1 && fFoundEmpty) {
                     num = num2;
                     break;
                 }
@@ -551,16 +572,14 @@ static bool OpenSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
             ret.Add(
                 SubRipper2SSA(str, CharSet),
                 file->IsUnicode(),
-                (((hh1*60 + mm1)*60) + ss1)*1000 + ms1,
-                (((hh2*60 + mm2)*60) + ss2)*1000 + ms2);
-        }
-        else if(c != EOF) // might be another format
-        {
-            return(false);
+                (((hh1 * 60 + mm1) * 60) + ss1) * 1000 + ms1,
+                (((hh2 * 60 + mm2) * 60) + ss2) * 1000 + ms2);
+        } else if (c != EOF) { // might be another format
+            return false;
         }
     }
 
-    return(!ret.IsEmpty());
+    return !ret.IsEmpty();
 }
 
 static bool OpenOldSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
@@ -568,7 +587,7 @@ static bool OpenOldSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int Char
     CStringW buff;
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty()) continue;
 
         for(int i = 0; i < buff.GetLength(); i++)
@@ -578,7 +597,7 @@ static bool OpenOldSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int Char
         }
 
         int hh1, mm1, ss1, hh2, mm2, ss2;
-        int c = swscanf(buff, L"{%d:%d:%d}{%d:%d:%d}", &hh1, &mm1, &ss1, &hh2, &mm2, &ss2);
+        int c = swscanf_s(buff, L"{%d:%d:%d}{%d:%d:%d}", &hh1, &mm1, &ss1, &hh2, &mm2, &ss2);
 
         if(c == 6)
         {
@@ -606,7 +625,7 @@ static bool OpenSubViewer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
     CStringW buff;
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty()) continue;
 
         if(buff[0] == '[')
@@ -617,7 +636,7 @@ static bool OpenSubViewer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
                 if(j < i) break;
 
                 CStringW tag = buff.Mid(i,j-i);
-                tag.Trim();
+                FastTrim(tag);
                 tag.MakeLower();
 
                 i += j-i;
@@ -631,7 +650,7 @@ static bool OpenSubViewer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
                 i = j;
 
                 if(tag == L"font")
-                    font = def.fontName.CompareNoCase(WToT(param)) ? param : L"";
+                    font = def.fontName.CompareNoCase(param) ? param : L"";
                 else if(tag == L"colf")
                     color = def.colors[0] != wcstol(((LPCWSTR)param)+2, 0, 16) ? param : L"";
                 else if(tag == L"size")
@@ -657,13 +676,13 @@ static bool OpenSubViewer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
 
         WCHAR sep;
         int hh1, mm1, ss1, hs1, hh2, mm2, ss2, hs2;
-        int c = swscanf(buff, L"%d:%d:%d%c%d,%d:%d:%d%c%d\n",
-            &hh1, &mm1, &ss1, &sep, &hs1, &hh2, &mm2, &ss2, &sep, &hs2);
+        int c = swscanf_s(buff, L"%d:%d:%d%c%d,%d:%d:%d%c%d\n",
+            &hh1, &mm1, &ss1, &sep, 1, &hs1, &hh2, &mm2, &ss2, &sep, 1, &hs2);
 
         if(c == 10)
         {
             CStringW str;
-            file->ReadString(str);
+            VERIFY(file->ReadString(str));
 
             str.Replace(L"[br]", L"\\N");
 
@@ -693,7 +712,7 @@ static bool OpenSubViewer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
 
 static STSStyle* GetMicroDVDStyle(CString str, int CharSet)
 {
-    STSStyle* ret = new STSStyle();
+    STSStyle* ret = DEBUG_NEW STSStyle();
     if(!ret) return(NULL);
 
     for(int i = 0, len = str.GetLength(); i < len; i++)
@@ -711,7 +730,7 @@ static STSStyle* GetMicroDVDStyle(CString str, int CharSet)
 
         if(!_tcsnicmp(code, _T("{c:$"), 4))
         {
-            _stscanf(code, _T("{c:$%x"), &ret->colors[0]);
+            _stscanf_s(code, _T("{c:$%x"), &ret->colors[0]);
         }
         else if(!_tcsnicmp(code, _T("{f:"), 3))
         {
@@ -720,12 +739,12 @@ static STSStyle* GetMicroDVDStyle(CString str, int CharSet)
         else if(!_tcsnicmp(code, _T("{s:"), 3))
         {
             float f;
-            if(1 == _stscanf(code, _T("{s:%f"), &f))
+            if(1 == _stscanf_s(code, _T("{s:%f"), &f))
                 ret->fontSize = f;
         }
         else if(!_tcsnicmp(code, _T("{h:"), 3))
         {
-            _stscanf(code, _T("{h:%d"), &ret->charSet);
+            _stscanf_s(code, _T("{h:%d"), &ret->charSet);
         }
         else if(!_tcsnicmp(code, _T("{y:"), 3))
         {
@@ -738,7 +757,7 @@ static STSStyle* GetMicroDVDStyle(CString str, int CharSet)
         else if(!_tcsnicmp(code, _T("{p:"), 3))
         {
             int p;
-            _stscanf(code, _T("{p:%d"), &p);
+            _stscanf_s(code, _T("{p:%d"), &p);
             ret->scrAlignment = (p == 0) ? 8 : 2;
         }
 
@@ -778,44 +797,44 @@ static CStringW MicroDVD2SSA(CStringW str, bool fUnicode, int CharSet)
             {
                 CStringW code = line.Mid(j, k-j);
 
-                if(!wcsnicmp(code, L"{c:$", 4))
+                if(!_wcsnicmp(code, L"{c:$", 4))
                 {
                     fRestore[COLOR] = (iswupper(code[1]) == 0);
                     code.MakeLower();
 
                     int color;
-                    swscanf(code, L"{c:$%x", &color);
+                    swscanf_s(code, L"{c:$%x", &color);
                     code.Format(L"{\\c&H%x&}", color);
                     ret += code;
                 }
-                else if(!wcsnicmp(code, L"{f:", 3))
+                else if(!_wcsnicmp(code, L"{f:", 3))
                 {
                     fRestore[FONTNAME] = (iswupper(code[1]) == 0);
 
                     code.Format(L"{\\fn%s}", code.Mid(3));
                     ret += code;
                 }
-                else if(!wcsnicmp(code, L"{s:", 3))
+                else if(!_wcsnicmp(code, L"{s:", 3))
                 {
                     fRestore[FONTSIZE] = (iswupper(code[1]) == 0);
                     code.MakeLower();
 
-                    float size;
-                    swscanf(code, L"{s:%f", &size);
+                    double size;
+                    swscanf_s(code, L"{s:%lf", &size);
                     code.Format(L"{\\fs%f}", size);
                     ret += code;
                 }
-                else if(!wcsnicmp(code, L"{h:", 3))
+                else if(!_wcsnicmp(code, L"{h:", 3))
                 {
                     fRestore[COLOR] = (_istupper(code[1]) == 0);
                     code.MakeLower();
 
-                    int CharSet;
-                    swscanf(code, L"{h:%d", &CharSet);
-                    code.Format(L"{\\fe%d}", CharSet);
+                    int iCharSet;
+                    swscanf_s(code, L"{h:%d", &iCharSet);
+                    code.Format(L"{\\fe%d}", iCharSet);
                     ret += code;
                 }
-                else if(!wcsnicmp(code, L"{y:", 3))
+                else if(!_wcsnicmp(code, L"{y:", 3))
                 {
                     bool f = (_istupper(code[1]) == 0);
 
@@ -828,13 +847,13 @@ static CStringW MicroDVD2SSA(CStringW str, bool fUnicode, int CharSet)
                     if(code.Find('s') >= 0) {ret += L"\\s1"; fRestore[STRIKEOUT] = f;}
                     ret += '}';
                 }
-                else if(!wcsnicmp(code, L"{o:", 3))
+                else if(!_wcsnicmp(code, L"{o:", 3))
                 {
                     code.MakeLower();
 
                     int x, y;
                     TCHAR c;
-                    swscanf(code, L"{o:%d%c%d", &x, &c, &y);
+                    swscanf_s(code, L"{o:%d%c%d", &x, &c, 1, &y);
                     code.Format(L"{\\move(%d,%d,0,0,0,0)}", x, y);
                     ret += code;
                 }
@@ -865,7 +884,7 @@ static CStringW MicroDVD2SSA(CStringW str, bool fUnicode, int CharSet)
             }
         }
 
-        memset(fRestore, 0, sizeof(bool)*fRestoreLen);
+        ZeroMemory(fRestore, sizeof(bool)*fRestoreLen);
 
         ret += L"\\N";
     }
@@ -882,20 +901,20 @@ static bool OpenMicroDVD(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
     CStringW buff;;
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty()) continue;
 
         int start, end;
-        int c = swscanf(buff, L"{%d}{%d}", &start, &end);
+        int c = swscanf_s(buff, L"{%d}{%d}", &start, &end);
 
-        if(c != 2) {c = swscanf(buff, L"{%d}{}", &start)+1; end = start + 60; fCheck = true;}
+        if(c != 2) {c = swscanf_s(buff, L"{%d}{}", &start)+1; end = start + 60; fCheck = true;}
 
         if(c != 2)
         {
             int i;
             if(buff.Find('{') == 0 && (i = buff.Find('}')) > 1 && i < buff.GetLength())
             {
-                if(STSStyle* s = GetMicroDVDStyle(WToT(buff.Mid(i+1)), CharSet))
+                if(STSStyle* s = GetMicroDVDStyle(buff.Mid(i+1), CharSet))
                 {
                     style = buff.Mid(1, i-1);
                     style.MakeUpper();
@@ -1053,7 +1072,7 @@ static CStringW SMI2SSA(CStringW str, int CharSet)
             {
                 DWORD color;
 
-                CString key = WToT(arg);
+                CString key = arg;
                 void* val;
                 if(g_colors.Lookup(key, val)) color = (DWORD)val;
                 else color = wcstol(arg, NULL, 16);
@@ -1096,7 +1115,7 @@ static bool OpenSami(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
 
     if(!fSAMI) return(false);
 
-    file->Seek(pos, 0);
+    file->Seek(pos, CFile::begin);
 
     bool fComment = false;
 
@@ -1104,7 +1123,7 @@ static bool OpenSami(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
 
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty()) continue;
 
         CStringW ubuff = buff;
@@ -1163,7 +1182,7 @@ static bool OpenVPlayer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
     CStringW buff;
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty()) continue;
 
         for(int i = 0; i < buff.GetLength(); i++)
@@ -1173,7 +1192,7 @@ static bool OpenVPlayer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
         }
 
         int hh, mm, ss;
-        int c = swscanf(buff, L"%d:%d:%d:", &hh, &mm, &ss);
+        int c = swscanf_s(buff, L"%d:%d:%d:", &hh, &mm, &ss);
 
         if(c == 3)
         {
@@ -1192,7 +1211,7 @@ static bool OpenVPlayer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
     return(!ret.IsEmpty());
 }
 
-static inline CStringW GetStr(CStringW& buff, char sep = ',') //throw(...)
+static inline CStringW GetStr(CStringW& buff, WCHAR sep = L',') //throw(...)
 {
     buff.TrimLeft();
 
@@ -1204,12 +1223,12 @@ static inline CStringW GetStr(CStringW& buff, char sep = ',') //throw(...)
     }
 
     CStringW ret = buff.Left(pos);
-    if(pos < buff.GetLength()) buff = buff.Mid(pos+1);
+    if(pos < buff.GetLength()) buff.Delete(0, pos + 1);
 
     return(ret);
 }
 
-static inline int GetInt(CStringW& buff, char sep = ',') //throw(...)
+static inline int GetInt(CStringW& buff, WCHAR sep = L',') //throw(...)
 {
     CStringW str;
 
@@ -1226,7 +1245,7 @@ static inline int GetInt(CStringW& buff, char sep = ',') //throw(...)
     return(ret);
 }
 
-static inline double GetFloat(CStringW& buff, char sep = ',') //throw(...)
+static inline double GetFloat(CStringW& buff, WCHAR sep = L',') //throw(...)
 {
     CStringW str;
 
@@ -1239,7 +1258,7 @@ static inline double GetFloat(CStringW& buff, char sep = ',') //throw(...)
     return((double)ret);
 }
 
-static inline CStringW::PCXSTR TryNextStr(CStringW::PXSTR * buff, WCHAR sep = WCHAR(','))
+static inline CStringW::PCXSTR TryNextStr(CStringW::PXSTR * buff, WCHAR sep = L',')
 {
     CStringW::PXSTR start = NULL;
     CStringW::PXSTR ret = NULL;
@@ -1258,28 +1277,35 @@ static inline CStringW::PCXSTR TryNextStr(CStringW::PXSTR * buff, WCHAR sep = WC
     return(ret);
 }
 
-static inline int NextInt(CStringW::PXSTR * buff, WCHAR sep = WCHAR(',')) //throw(...)
+static inline int NextInt(CStringW::PXSTR * buff, WCHAR sep = L',') //throw(...)
 {
     CStringW::PCXSTR str = TryNextStr(buff, sep);
-
-    const wchar_t *fmtstr = L"%d";
-    if (str[0] == '&' && (str[1] == 'h' || str[1] == 'H') || str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
-        fmtstr = L"%x";
-        str += 2;
-    }
+    CStringW::PXSTR strEnd;
 
     int ret;
-    if(swscanf(str, fmtstr, &ret) != 1) throw 1;
+    if (str[0] == '&' && (str[1] == 'h' || str[1] == 'H') || str[0] == '0' && (str[1] == 'x' || str[1] == 'X')) {
+        str += 2;
+        ret = (int)wcstoul(str, &strEnd, 16);
+    } else {
+        ret = wcstol(str, &strEnd, 10);
+    }
+
+    if (str == strEnd) { // Ensure something was parsed
+        throw 1;
+    }
 
     return(ret);
 }
 
-static inline double NextFloat(CStringW::PXSTR * buff, WCHAR sep = WCHAR(',')) //throw(...)
+static inline double NextFloat(CStringW::PXSTR * buff, WCHAR sep = L',') //throw(...)
 {
-    CStringW str;
 
-    str = TryNextStr(buff, sep);
-    str.MakeLower();
+    if (sep == L'.') { // Parsing a float with '.' as separator doesn't make much sense...
+        ASSERT(FALSE);
+        return NextInt(buff, sep);
+    }
+
+    CStringW::PCXSTR str = TryNextStr(buff, sep);
 
     float ret;
     if(swscanf(str, L"%f", &ret) != 1) throw 1;
@@ -1297,7 +1323,7 @@ static bool LoadFont(CString& font)
 
     const TCHAR* s = font;
     const TCHAR* e = s + len;
-    for(BYTE* p = pData; s < e; s++, p++) *p = *s - 33;
+    for(BYTE* p = pData; s < e; s++, p++) *p = BYTE(*s - 33);
 
     for(int i = 0, j = 0, k = len&~3; i < k; i+=4, j+=3)
     {
@@ -1342,7 +1368,7 @@ static bool LoadFont(CString& font)
             chksum += ((DWORD*)(BYTE*)pData)[i];
 
         CString fn;
-        fn.Format(_T("%sfont%08x.ttf"), path, chksum);
+        fn.Format(_T("%sfont%08lx.ttf"), path, chksum);
 
         CFileStatus fs;
         if(!CFileGetStatus(fn, fs))
@@ -1366,7 +1392,7 @@ static bool LoadUUEFont(CTextFile* file)
     CString s, font;
     while(file->ReadString(s))
     {
-        s.Trim();
+        FastTrim(s);
         if(s.IsEmpty()) break;
         if(s[0] == '[') // check for standard section headers
         {
@@ -1395,18 +1421,15 @@ static bool OpenSubStationAlpha(CTextFile* file, CSimpleTextSubtitle& ret, int C
     int version = 3, sver = 3;
 
     ret.m_eYCbCrMatrix = CSimpleTextSubtitle::YCbCrMatrix_BT601;
-    ret.m_eYCbCrRange  = CSimpleTextSubtitle::YCbCrRange_TV;
+    ret.m_eYCbCrRange = CSimpleTextSubtitle::YCbCrRange_TV;
 
     CStringW buff;
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty() || buff.GetAt(0) == ';') continue;
 
-        CStringW entry;
-
-//      try {
-            entry = GetStr(buff, ':');
+        CStringW entry = GetStr(buff, ':');
 //  }
 //      catch(...) {continue;}
 
@@ -1421,29 +1444,29 @@ static bool OpenSubStationAlpha(CTextFile* file, CSimpleTextSubtitle& ret, int C
                 CString Style, Actor, Effect;
                 CRect marginRect;
 
-                if(version <= 4){TryNextStr(&__buff, '='); NextInt(&__buff);} /* Marked = */
+                if(version <= 4){TryNextStr(&__buff, L'='); NextInt(&__buff);} /* Marked = */
                 if(version >= 5)layer = NextInt(&__buff);
-                hh1 = NextInt(&__buff, ':');
-                mm1 = NextInt(&__buff, ':');
-                ss1 = NextInt(&__buff, '.');
+                hh1 = NextInt(&__buff, L':');
+                mm1 = NextInt(&__buff, L':');
+                ss1 = NextInt(&__buff, L'.');
                 ms1_div10 = NextInt(&__buff);
-                hh2 = NextInt(&__buff, ':');
-                mm2 = NextInt(&__buff, ':');
-                ss2 = NextInt(&__buff, '.');
+                hh2 = NextInt(&__buff, L':');
+                mm2 = NextInt(&__buff, L':');
+                ss2 = NextInt(&__buff, L'.');
                 ms2_div10 = NextInt(&__buff);
-                Style = WToT(TryNextStr(&__buff));
-                Actor = WToT(TryNextStr(&__buff));
+                Style = TryNextStr(&__buff);
+                Actor = TryNextStr(&__buff);
                 marginRect.left = NextInt(&__buff);
                 marginRect.right = NextInt(&__buff);
                 marginRect.top = marginRect.bottom = NextInt(&__buff);
                 if(version >= 6)marginRect.bottom = NextInt(&__buff);
-                Effect = WToT(TryNextStr(&__buff));
+                Effect = TryNextStr(&__buff);
 
                 CStringW buff2 = __buff;
                 int len = min(Effect.GetLength(), buff2.GetLength());
-                if(Effect.Left(len) == WToT(buff2.Left(len))) Effect.Empty();
+                if(Effect.Left(len) == buff2.Left(len)) Effect.Empty();
 
-                Style.TrimLeft('*');
+                Style.TrimLeft(_T('*'));
                 if(!Style.CompareNoCase(_T("Default"))) Style = _T("Default");
 
                 ret.AddSTSEntryOnly(buff2,
@@ -1458,6 +1481,69 @@ static bool OpenSubStationAlpha(CTextFile* file, CSimpleTextSubtitle& ret, int C
             {
                 //                ASSERT(0);
                 //                throw;
+                return(false);
+            }
+        }
+        else if(entry == L"style")
+        {
+            STSStyle* style = DEBUG_NEW STSStyle;
+            if(!style) return(false);
+
+            try
+            {
+                CString StyleName;
+                int alpha;
+                CRect tmp_rect;
+
+                StyleName = GetStr(buff);
+                style->fontName = GetStr(buff);
+                style->fontSize = GetFloat(buff);
+                for(size_t i = 0; i < 4; i++) style->colors[i] = (COLORREF)GetInt(buff);
+                style->fontWeight = !!GetInt(buff) ? FW_BOLD : FW_NORMAL;
+                style->fItalic = !!GetInt(buff);
+if(sver >= 5)   style->fUnderline = !!GetInt(buff);
+if(sver >= 5)   style->fStrikeOut = !!GetInt(buff);
+if(sver >= 5)   style->fontScaleX = GetFloat(buff);
+if(sver >= 5)   style->fontScaleY = GetFloat(buff);
+if(sver >= 5)   style->fontSpacing = GetFloat(buff);
+if(sver >= 5)   style->fontAngleZ = GetFloat(buff);
+if(sver >= 4)   style->borderStyle = GetInt(buff);
+                style->outlineWidthX = style->outlineWidthY = GetFloat(buff);
+                style->shadowDepthX = style->shadowDepthY = GetFloat(buff);
+                style->scrAlignment = GetInt(buff);
+                tmp_rect.left =  GetInt(buff);
+                tmp_rect.right = GetInt(buff);
+                tmp_rect.top = tmp_rect.bottom = GetInt(buff);
+if(sver >= 6)   tmp_rect.bottom = GetInt(buff);
+                style->marginRect = tmp_rect;
+if(sver <= 4)   alpha = GetInt(buff);
+                style->charSet = GetInt(buff);
+if(sver >= 6)   style->relativeTo = GetInt(buff);
+
+if(sver <= 4)   style->colors[2] = style->colors[3]; // style->colors[2] is used for drawing the outline
+if(sver <= 4)   alpha = max(min(alpha, 0xff), 0);
+if(sver <= 4)   {for(size_t i = 0; i < 3; i++) style->alpha[i] = alpha; style->alpha[3] = 0x80;}
+if(sver >= 5)   for(size_t i = 0; i < 4; i++) {style->alpha[i] = (BYTE)(style->colors[i]>>24); style->colors[i] &= 0xffffff;}
+if(sver >= 5)   style->fontScaleX = max(style->fontScaleX, 0);
+if(sver >= 5)   style->fontScaleY = max(style->fontScaleY, 0);
+if(sver >= 5)   style->fontSpacing = max(style->fontSpacing, 0);
+                style->fontAngleX = style->fontAngleY = 0;
+                style->borderStyle = style->borderStyle == 1 ? 0 : style->borderStyle == 3 ? 1 : 0;
+                style->outlineWidthX = max(style->outlineWidthX, 0);
+                style->outlineWidthY = max(style->outlineWidthY, 0);
+                style->shadowDepthX = max(style->shadowDepthX, 0);
+                style->shadowDepthY = max(style->shadowDepthY, 0);
+if(sver <= 4)   style->scrAlignment = (style->scrAlignment&4) ? ((style->scrAlignment&3)+6) // top
+                                        : (style->scrAlignment&8) ? ((style->scrAlignment&3)+3) // mid
+                                        : (style->scrAlignment&3); // bottom
+
+                StyleName.TrimLeft(_T('*'));
+
+                ret.AddStyle(StyleName, style);
+            }
+            catch(...)
+            {
+                delete style;
                 return(false);
             }
         }
@@ -1527,69 +1613,6 @@ static bool OpenSubStationAlpha(CTextFile* file, CSimpleTextSubtitle& ret, int C
             fRet = true;
             sver = 6;
         }
-        else if(entry == L"style")
-        {
-            STSStyle* style = new STSStyle;
-            if(!style) return(false);
-
-            try
-            {
-                CString StyleName;
-                int alpha;
-                CRect tmp_rect;
-
-                StyleName = WToT(GetStr(buff));
-                style->fontName = WToT(GetStr(buff));
-                style->fontSize = GetFloat(buff);
-                for(int i = 0; i < 4; i++) style->colors[i] = (COLORREF)GetInt(buff);
-                style->fontWeight = !!GetInt(buff) ? FW_BOLD : FW_NORMAL;
-                style->fItalic = !!GetInt(buff);
-if(sver >= 5)   style->fUnderline = !!GetInt(buff);
-if(sver >= 5)   style->fStrikeOut = !!GetInt(buff);
-if(sver >= 5)   style->fontScaleX = GetFloat(buff);
-if(sver >= 5)   style->fontScaleY = GetFloat(buff);
-if(sver >= 5)   style->fontSpacing = GetFloat(buff);
-if(sver >= 5)   style->fontAngleZ = GetFloat(buff);
-if(sver >= 4)   style->borderStyle = GetInt(buff);
-                style->outlineWidthX = style->outlineWidthY = GetFloat(buff);
-                style->shadowDepthX = style->shadowDepthY = GetFloat(buff);
-                style->scrAlignment = GetInt(buff);
-                tmp_rect.left =  GetInt(buff);
-                tmp_rect.right = GetInt(buff);
-                tmp_rect.top = tmp_rect.bottom = GetInt(buff);
-if(sver >= 6)   tmp_rect.bottom = GetInt(buff);
-                style->marginRect = tmp_rect;
-if(sver <= 4)   alpha = GetInt(buff);
-                style->charSet = GetInt(buff);
-if(sver >= 6)   style->relativeTo = GetInt(buff);
-
-if(sver <= 4)   style->colors[2] = style->colors[3]; // style->colors[2] is used for drawing the outline
-if(sver <= 4)   alpha = max(min(alpha, 0xff), 0);
-if(sver <= 4)   {for(int i = 0; i < 3; i++) style->alpha[i] = alpha; style->alpha[3] = 0x80;}
-if(sver >= 5)   for(int i = 0; i < 4; i++) {style->alpha[i] = (BYTE)(style->colors[i]>>24); style->colors[i] &= 0xffffff;}
-if(sver >= 5)   style->fontScaleX = max(style->fontScaleX, 0);
-if(sver >= 5)   style->fontScaleY = max(style->fontScaleY, 0);
-if(sver >= 5)   style->fontSpacing = max(style->fontSpacing, 0);
-                style->fontAngleX = style->fontAngleY = 0;
-                style->borderStyle = style->borderStyle == 1 ? 0 : style->borderStyle == 3 ? 1 : 0;
-                style->outlineWidthX = max(style->outlineWidthX, 0);
-                style->outlineWidthY = max(style->outlineWidthY, 0);
-                style->shadowDepthX = max(style->shadowDepthX, 0);
-                style->shadowDepthY = max(style->shadowDepthY, 0);
-if(sver <= 4)   style->scrAlignment = (style->scrAlignment&4) ? ((style->scrAlignment&3)+6) // top
-                                        : (style->scrAlignment&8) ? ((style->scrAlignment&3)+3) // mid
-                                        : (style->scrAlignment&3); // bottom
-
-                StyleName.TrimLeft('*');
-
-                ret.AddStyle(StyleName, style);
-            }
-            catch(...)
-            {
-                delete style;
-                return(false);
-            }
-        }
         else if(entry == L"[events]")
         {
             fRet = true;
@@ -1601,31 +1624,28 @@ if(sver <= 4)   style->scrAlignment = (style->scrAlignment&4) ? ((style->scrAlig
         else if(entry == L"ycbcr matrix")
         {
             buff = GetStr(buff);
-            // When used with no parameters, TrimRight removes trailing newline,
-            // space, and tab characters from the string.
-            buff.TrimRight();
             buff.MakeLower();
-            if (buff=="none")
+            if (buff.Left(4)==L"none")
             {
                 ret.m_eYCbCrMatrix = CSimpleTextSubtitle::YCbCrMatrix_AUTO;
                 ret.m_eYCbCrRange = CSimpleTextSubtitle::YCbCrRange_AUTO;
             }
-            else if (buff=="tv.601")
+            else if (buff.Left(6)==L"tv.601")
             {
                 ret.m_eYCbCrMatrix = CSimpleTextSubtitle::YCbCrMatrix_BT601;
                 ret.m_eYCbCrRange = CSimpleTextSubtitle::YCbCrRange_TV;
             }
-            else if (buff=="tv.709")
+            else if (buff.Left(6)==L"tv.709")
             {
                 ret.m_eYCbCrMatrix = CSimpleTextSubtitle::YCbCrMatrix_BT709;
                 ret.m_eYCbCrRange = CSimpleTextSubtitle::YCbCrRange_TV;
             }
-            else if (buff=="pc.601")
+            else if (buff.Left(6)==L"pc.601")
             {
                 ret.m_eYCbCrMatrix = CSimpleTextSubtitle::YCbCrMatrix_BT601;
                 ret.m_eYCbCrRange = CSimpleTextSubtitle::YCbCrRange_PC;
             }
-            else if (buff=="pc.709")
+            else if (buff.Left(6)==L"pc.709")
             {
                 ret.m_eYCbCrMatrix = CSimpleTextSubtitle::YCbCrMatrix_BT709;
                 ret.m_eYCbCrRange = CSimpleTextSubtitle::YCbCrRange_PC;
@@ -1645,13 +1665,10 @@ static bool OpenXombieSub(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
     CStringW buff;
     while(file->ReadString(buff))
     {
-        buff.Trim();
+        FastTrim(buff);
         if(buff.IsEmpty() || buff.GetAt(0) == ';') continue;
 
-        CStringW entry;
-
-//      try {
-            entry = GetStr(buff, '=');
+        CStringW entry = GetStr(buff, L'=');
 //  }
 //      catch(...) {continue;}
 
@@ -1687,7 +1704,7 @@ static bool OpenXombieSub(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
         }
         else if(entry == L"style")
         {
-            STSStyle* style = new STSStyle;
+            STSStyle* style = DEBUG_NEW STSStyle;
             if(!style) return(false);
 
             try
@@ -1695,11 +1712,11 @@ static bool OpenXombieSub(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
                 CString StyleName;
                 CRect tmp_rect;
 
-                StyleName = WToT(GetStr(buff)) + _T("_") + WToT(GetStr(buff));
-                style->fontName = WToT(GetStr(buff));
+                StyleName = GetStr(buff) + _T("_") + GetStr(buff);
+                style->fontName = GetStr(buff);
                 style->fontSize = GetFloat(buff);
-                for(int i = 0; i < 4; i++) style->colors[i] = (COLORREF)GetInt(buff);
-                for(int i = 0; i < 4; i++) style->alpha[i] = GetInt(buff);
+                for(size_t  i = 0; i < 4; i++) style->colors[i] = (COLORREF)GetInt(buff);
+                for(size_t  i = 0; i < 4; i++) style->alpha[i] = GetInt(buff);
                 style->fontWeight = !!GetInt(buff) ? FW_BOLD : FW_NORMAL;
                 style->fItalic = !!GetInt(buff);
                 style->fUnderline = !!GetInt(buff);
@@ -1752,21 +1769,21 @@ static bool OpenXombieSub(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
                 if(GetStr(buff) != L"D") continue;
                 id = GetStr(buff);
                 layer = GetInt(buff);
-                hh1 = GetInt(buff, ':');
-                mm1 = GetInt(buff, ':');
-                ss1 = GetInt(buff, '.');
+                hh1 = GetInt(buff, L':');
+                mm1 = GetInt(buff, L':');
+                ss1 = GetInt(buff, L'.');
                 ms1 = GetInt(buff);
-                hh2 = GetInt(buff, ':');
-                mm2 = GetInt(buff, ':');
-                ss2 = GetInt(buff, '.');
+                hh2 = GetInt(buff, L':');
+                mm2 = GetInt(buff, L':');
+                ss2 = GetInt(buff, L'.');
                 ms2 = GetInt(buff);
-                Style = WToT(GetStr(buff)) + _T("_") + WToT(GetStr(buff));
-                Actor = WToT(GetStr(buff));
+                Style = GetStr(buff) + _T("_") + GetStr(buff);
+                Actor = GetStr(buff);
                 marginRect.left = GetInt(buff);
                 marginRect.right = GetInt(buff);
                 marginRect.top = marginRect.bottom = GetInt(buff);
 
-                Style.TrimLeft('*');
+                Style.TrimLeft(_T('*'));
                 if(!Style.CompareNoCase(_T("Default"))) Style = _T("Default");
 
                 ret.Add(buff,
@@ -1811,67 +1828,96 @@ static bool OpenUSF(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
     return(false);
 }
 
-static CStringW MPL22SSA(CStringW str)
+static CStringW MPL22SSA(CStringW str, bool fUnicode, int CharSet)
 {
-    CAtlList<CStringW> sl;
-    Explode(str, sl, '|');
-    POSITION pos = sl.GetHeadPosition();
-    while(pos)
-    {
-        CStringW& s = sl.GetNext(pos);
-        if(s[0] == '/') {s = L"{\\i1}" + s.Mid(1) + L"{\\i0}";}
+    // Convert MPL2 italic tags to MicroDVD italic tags
+    if (str[0] == L'/') {
+        str = L"{y:i}" + str.Mid(1);
     }
-    str = Implode(sl, '\n');
-    str.Replace(L"\n", L"\\N");
-    return str;
+    str.Replace(L"|/", L"|{y:i}");
+
+    return MicroDVD2SSA(str, fUnicode, CharSet);
 }
 
 static bool OpenMPL2(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
 {
-    CStringW buff;;
-    while(file->ReadString(buff))
-    {
-        buff.Trim();
-        if(buff.IsEmpty()) continue;
+    CStringW buff;
+    while (file->ReadString(buff)) {
+        FastTrim(buff);
+        if (buff.IsEmpty()) {
+            continue;
+        }
 
         int start, end;
-        int c = swscanf(buff, L"[%d][%d]", &start, &end);
+        int c = swscanf_s(buff, L"[%d][%d]", &start, &end);
 
-        if(c == 2)
-        {
+        if (c == 2) {
             ret.Add(
-                MPL22SSA(buff.Mid(buff.Find(']', buff.Find(']')+1)+1)),
+                MPL22SSA(buff.Mid(buff.Find(']', buff.Find(']') + 1) + 1), file->IsUnicode(), CharSet),
                 file->IsUnicode(),
-                start*100, end*100);
-        }
-        else if(c != EOF) // might be another format
-        {
-            return(false);
+                start * 100, end * 100);
+        } else if (c != EOF) { // might be another format
+            return false;
         }
     }
 
     return(!ret.IsEmpty());
 }
 
-typedef bool (*STSOpenFunct)(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet);
+static bool OpenRealText(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
+{
+    std::wstring szFile;
+    CStringW buff;
 
-static bool OpenRealText(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet);
+    while (file->ReadString(buff)) {
+        FastTrim(buff);
+        if (buff.IsEmpty()) {
+            continue;
+        }
+
+        // Make sure that the subtitle file starts with a <window> tag
+        if (szFile.empty() && buff.CompareNoCase(_T("<window")) < 0) {
+            return false;
+        }
+
+        szFile += _T("\n") + buff;
+    }
+
+    CRealTextParser RealTextParser;
+    if (!RealTextParser.ParseRealText(szFile)) {
+        return false;
+    }
+
+    CRealTextParser::Subtitles crRealText = RealTextParser.GetParsedSubtitles();
+
+    for (auto i = crRealText.m_mapLines.cbegin(); i != crRealText.m_mapLines.cend(); ++i) {
+        ret.Add(
+            SubRipper2SSA(i->second.c_str(), CharSet),
+            file->IsUnicode(),
+            i->first.first,
+            i->first.second);
+    }
+
+    return !ret.IsEmpty();
+}
+
+typedef bool (*STSOpenFunct)(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet);
 
 typedef struct {STSOpenFunct open; tmode mode;} OpenFunctStruct;
 
 static OpenFunctStruct OpenFuncts[] =
 {
     OpenSubStationAlpha, TIME,
-    OpenSubRipper, TIME,
-    OpenOldSubRipper, TIME,
-    OpenSubViewer, TIME,
-    OpenMicroDVD, FRAME,
-    OpenSami, TIME,
-    OpenVPlayer, TIME,
-    OpenXombieSub, TIME,
-    OpenUSF, TIME,
-    OpenMPL2, TIME,
-    OpenRealText, TIME,
+    OpenSubRipper      , TIME,
+    OpenOldSubRipper   , TIME,
+    OpenSubViewer      , TIME,
+    OpenMicroDVD       , FRAME,
+    OpenSami           , TIME,
+    OpenVPlayer        , TIME,
+    OpenXombieSub      , TIME,
+    OpenUSF            , TIME,
+    OpenMPL2           , TIME,
+    OpenRealText       , TIME,
 };
 
 static int nOpenFuncts = countof(OpenFuncts);
@@ -1880,93 +1926,41 @@ static int nOpenFuncts = countof(OpenFuncts);
 
 CSimpleTextSubtitle::CSimpleTextSubtitle()
 {
-    m_mode = TIME;
-    m_dstScreenSize = CSize(0, 0);
-    m_defaultWrapStyle = 0;
-    m_collisions = 0;
-    m_fScaledBAS = false;
-    m_encoding = CTextFile::ASCII;
+    m_mode                 = TIME;
+    m_dstScreenSize        = CSize(0, 0);
+    m_defaultWrapStyle     = 0;
+    m_collisions           = 0;
+    m_fScaledBAS           = false;
+    m_encoding             = CTextFile::DEFAULT_ENCODING;
     m_ePARCompensationType = EPCTDisabled;
-    m_dPARCompensation = 1.0;
-    m_eYCbCrMatrix = YCbCrMatrix_AUTO;
-    m_eYCbCrRange = YCbCrRange_AUTO;
+    m_dPARCompensation     = 1.0;
+    m_eYCbCrMatrix         = YCbCrMatrix_AUTO;
+    m_eYCbCrRange          = YCbCrRange_AUTO;
+    m_fForcedDefaultStyle  = false;
+    m_defaultStyle.charSet = DEFAULT_CHARSET;
 }
 
 CSimpleTextSubtitle::~CSimpleTextSubtitle()
 {
     Empty();
 }
-/*
-CSimpleTextSubtitle::CSimpleTextSubtitle(CSimpleTextSubtitle& sts)
-{
-    *this = sts;
-}
-
-CSimpleTextSubtitle& CSimpleTextSubtitle::operator = (CSimpleTextSubtitle& sts)
-{
-    Empty();
-
-    m_name = sts.m_name;
-    m_mode = sts.m_mode;
-    m_dstScreenSize = sts.m_dstScreenSize;
-    m_defaultWrapStyle = sts.m_defaultWrapStyle;
-    m_collisions = sts.m_collisions;
-    m_fScaledBAS = sts.m_fScaledBAS;
-    m_fSSA = sts.m_fSSA;
-    m_fUsingAutoGeneratedDefaultStyle = sts.m_fUsingAutoGeneratedDefaultStyle;
-    CopyStyles(sts.m_styles);
-    m_segments.Copy(sts.m_segments);
-    Copy(sts);
-
-    return(*this);
-}
-*/
 
 void CSimpleTextSubtitle::Copy(CSimpleTextSubtitle& sts)
 {
     Empty();
 
-    m_name = sts.m_name;
-    m_mode = sts.m_mode;
-    m_dstScreenSize = sts.m_dstScreenSize;
-    m_defaultWrapStyle = sts.m_defaultWrapStyle;
-    m_collisions = sts.m_collisions;
-    m_fScaledBAS = sts.m_fScaledBAS;
-    m_encoding = sts.m_encoding;
-    m_fUsingAutoGeneratedDefaultStyle = sts.m_fUsingAutoGeneratedDefaultStyle;
-    CopyStyles(sts.m_styles);
+    m_name                         = sts.m_name;
+    m_mode                         = sts.m_mode;
+    m_dstScreenSize                = sts.m_dstScreenSize;
+    m_defaultWrapStyle             = sts.m_defaultWrapStyle;
+    m_collisions                   = sts.m_collisions;
+    m_fScaledBAS                   = sts.m_fScaledBAS;
+    m_encoding                     = sts.m_encoding;
+    m_defaultStyle                 = sts.m_defaultStyle;
+    m_fForcedDefaultStyle          = sts.m_fForcedDefaultStyle;
+    CopyStyles     (sts.m_styles  );
     m_segments.Copy(sts.m_segments);
-    m_entries.Copy(sts.m_entries);
-}
-
-void CSimpleTextSubtitle::Append(CSimpleTextSubtitle& sts, int timeoff)
-{
-    if(timeoff < 0)
-    {
-        timeoff = m_entries.GetCount() > 0 ? m_entries.GetAt(m_entries.GetCount()-1).end : 0;
-    }
-
-    for(int i = 0, j = m_entries.GetCount(); i < j; i++)
-    {
-        if(m_entries.GetAt(i).start > timeoff)
-        {
-            m_entries.RemoveAt(i, j - i);
-            break;
-        }
-    }
-
-    CopyStyles(sts.m_styles, true);
-
-    for(int i = 0, j = sts.m_entries.GetCount(); i < j; i++)
-    {
-        STSEntry stse = sts.m_entries.GetAt(i);
-        stse.start += timeoff;
-        stse.end += timeoff;
-        stse.readorder += m_entries.GetCount();
-        m_entries.Add(stse);
-    }
-
-    CreateSegments();
+    m_entries.Copy (sts.m_entries );
 }
 
 void CSTSStyleMap::Free()
@@ -1994,7 +1988,7 @@ bool CSimpleTextSubtitle::CopyStyles(const CSTSStyleMap& styles, bool fAppend)
         STSStyle* val;
         styles.GetNextAssoc(pos, key, val);
 
-        STSStyle* s = new STSStyle;
+        STSStyle* s = DEBUG_NEW STSStyle;
         if(!s) return(false);
 
         *s = *val;
@@ -2013,17 +2007,23 @@ void CSimpleTextSubtitle::Empty()
     m_entries.RemoveAll();
 }
 
+static bool SegmentCompStart(const STSSegment& segment, int start)
+{
+    return (segment.start < start);
+}
+
 void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, int start, int end, 
     CString style, const CString& actor, const CString& effect, const CRect& marginRect, int layer, int readorder)
 {
-    XY_LOG_INFO(start<<_T(" ")<<end<<_T(" ")<<str.GetString()<<_T(" style:")<<style.GetString()
-        <<_T(" Unicode:")<<fUnicode
-        <<_T(" actor:")<<actor.GetString()<<_T(" effect:")<<effect.GetString()
-        <<_T(" (l:")<<marginRect.left<<_T(",t:")<<marginRect.top<<_T(",r:")<<marginRect.right<<_T(",b:")<<marginRect.bottom
-        <<_T(" layer:")<<layer<<_T(" readorder:")<<readorder
-        <<_T(" entries:")<<m_entries.GetCount()<<_T(" seg:")<<m_segments.GetCount());
+    TRACE_SUB(ReftimeToCString(start)<<" "<<ReftimeToCString(end)<<" "<<str.GetString()<<" style:"<<style.GetString()
+        <<" Unicode:"<<fUnicode
+        <<" actor:"<<actor.GetString()<<" effect:"<<effect.GetString()
+        <<" (l:"<<marginRect.left<<",t:"<<marginRect.top<<",r:"<<marginRect.right<<",b:"<<marginRect.bottom
+        <<" layer:"<<layer<<" readorder:"<<readorder
+        <<" entries:"<<m_entries.GetCount()<<" seg:"<<m_segments.GetCount());
 
-    if(start > end || str.Trim().IsEmpty() ) return;
+    FastTrim(str);
+    if (str.IsEmpty() || start > end) return;
 
     str.Remove('\r');
     str.Replace(L"\n", L"\\N");
@@ -2034,162 +2034,104 @@ void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, int start, int end,
     }
 
     STSEntry sub;
-    sub.str = str;
-    sub.fUnicode = fUnicode;
-    sub.style = style;
-    sub.actor = actor;
-    sub.effect = effect;
+    sub.str        = str;
+    sub.fUnicode   = fUnicode;
+    sub.style      = style;
+    sub.actor      = actor;
+    sub.effect     = effect;
     sub.marginRect = marginRect;
-    sub.layer = layer;
-    sub.start = start;
-    sub.end = end;
-    sub.readorder = readorder < 0 ? m_entries.GetCount() : readorder;
-    int n = m_entries.Add(sub);
+    sub.layer      = layer;
+    sub.start      = start;
+    sub.end        = end;
+    sub.readorder  = readorder < 0 ? (int)m_entries.GetCount() : readorder;
+    int n = (int)m_entries.Add(sub);
 
-    int len = m_segments.GetCount();
+    if (start == end) return;
 
-    if(len == 0)
-    {
+    size_t segmentsCount = m_segments.GetCount();
+
+    if (segmentsCount == 0) { // First segment
         STSSegment stss(start, end);
         stss.subs.Add(n);
         m_segments.Add(stss);
-    }
-    else if(end <= m_segments[0].start)
-    {
-        STSSegment stss(start, end);
-        stss.subs.Add(n);
-        m_segments.InsertAt(0, stss);
-    }
-    else if(start >= m_segments[len-1].end)
-    {
-        STSSegment stss(start, end);
-        stss.subs.Add(n);
-        m_segments.Add(stss);
-    }
-    else
-    {
-        if(start < m_segments[0].start)
-        {
-            STSSegment stss(start, m_segments[0].start);
+    } else {
+        STSSegment* segmentsStart = m_segments.GetData();
+        STSSegment* segmentsEnd   = segmentsStart + segmentsCount;
+        STSSegment* segment = std::lower_bound(segmentsStart, segmentsEnd, start, SegmentCompStart);
+
+        size_t i = segment - segmentsStart;
+        if (i > 0 && m_segments[i - 1].end > start) {
+            // The beginning of i-1th segment isn't modified
+            // by the new entry so separate it in two segments
+            STSSegment stss(m_segments[i - 1].start, start);
+            stss.subs.Copy(m_segments[i - 1].subs);
+            m_segments[i - 1].start = start;
+            m_segments.InsertAt(i - 1, stss);
+        } else if (i < segmentsCount && start < m_segments[i].start) {
+            // The new entry doesn't start in an existing segment.
+            // It might even not overlap with any segment at all
+            STSSegment stss(start, min(end, m_segments[i].start));
             stss.subs.Add(n);
-            start = m_segments[0].start;
-            m_segments.InsertAt(0, stss);
+            m_segments.InsertAt(i, stss);
+            i++;
         }
 
-        for(size_t i = 0; i < m_segments.GetCount(); i++)
-        {
+        int lastEnd = INT_MAX;
+        for (; i < m_segments.GetCount() && m_segments[i].start < end; i++) {
             STSSegment& s = m_segments[i];
 
-            if(start >= s.end)
-            {
-                continue;
-            }
-            else if(end <= s.start)
-            {
-                break;
-            }
-            else if(s.start < start && start < s.end)
-            {
-                STSSegment stss(s.start, start);
-                stss.subs.Copy(s.subs);
-                s.start = start;
+            if (lastEnd < s.start) {
+                // There is a gap between the segments overlapped by
+                // the new entry so we have to create a new one
+                STSSegment stss(lastEnd, s.start);
+                stss.subs.Add(n);
+                lastEnd = s.start; // s might not point on the right segment after inserting so do the modification now
                 m_segments.InsertAt(i, stss);
-                continue;
-            }
-            if(start <= s.start && s.end <= end)
-            {
-                for(int j = 0, k = s.subs.GetCount(); j <= k; j++)
-                {
-                    if(j == k || sub.readorder < m_entries.GetAt(s.subs[j]).readorder)
-                    {
-                        s.subs.InsertAt(j, n);
-                        break;
+            } else {
+                if (end < s.end) {
+                    // The end of current segment isn't modified
+                    // by the new entry so separate it in two segments
+                    STSSegment stss(end, s.end);
+                    stss.subs.Copy(s.subs);
+                    s.end = end; // s might not point on the right segment after inserting so do the modification now
+                    m_segments.InsertAt(i + 1, stss);
+                }
+
+                // The array might have been reallocated so create a new reference
+                STSSegment& sAdd = m_segments[i];
+
+                // Add the entry to the current segment now that we are you it belongs to it
+                size_t entriesCount = sAdd.subs.GetCount();
+                // Take a shortcut when possible
+                if (!entriesCount || sub.readorder >= m_entries.GetAt(sAdd.subs[entriesCount - 1]).readorder) {
+                    sAdd.subs.Add(n);
+                } else {
+                    for (size_t j = 0; j < entriesCount; j++) {
+                        if (sub.readorder < m_entries.GetAt(sAdd.subs[j]).readorder) {
+                            sAdd.subs.InsertAt(j, n);
+                            break;
+                        }
                     }
                 }
+
+                lastEnd = sAdd.end;
             }
-            else if(s.start < end && end < s.end)
-            {
-                STSSegment stss(s.start, end);
-                stss.subs.Copy(s.subs);
-                for(int j = 0, k = s.subs.GetCount(); j <= k; j++)
-                {
-                    if(j == k || sub.readorder < m_entries.GetAt(stss.subs[j]).readorder)
-                    {
-                        stss.subs.InsertAt(j, n);
-                        break;
-                    }
-                }
-                s.start = end;
-                m_segments.InsertAt(i, stss);
-            }            
         }
 
-        if(end > m_segments[m_segments.GetCount()-1].end)
-        {
-            STSSegment stss(m_segments[m_segments.GetCount()-1].end, end);
+        if (end > m_segments[i - 1].end) {
+            // The new entry ends after the last overlapping segment.
+            // It might even not overlap with any segment at all
+            STSSegment stss(max(start, m_segments[i - 1].end), end);
             stss.subs.Add(n);
-            m_segments.Add(stss);
+            m_segments.InsertAt(i, stss);
         }
     }
-/*
-    str.Remove('\r');
-    str.Replace(L"\n", L"\\N");
-    if(style.IsEmpty()) style = _T("Default");
-
-    int j = m_segments.GetCount();
-    for(int i = j-1; i >= 0; i--)
-    {
-        if(m_segments[i].end <= start)
-        {
-            break;
-        }
-        else if(m_segments[i].start >= start)
-        {
-            m_segments.SetCount(m_segments.GetCount()-1);
-            j--;
-        }
-        else if(m_segments[i].end > start)
-        {
-            if(i < j-1) m_segments.RemoveAt(i+1, j-i-1);
-            m_segments[i].end = start;
-            break;
-        }
-    }
-
-    if(m_segments.GetCount() == 0 && j > 0)
-        CSTSArray::RemoveAll();
-
-    STSSegment stss(start, end);
-    int len = m_entries.GetCount();
-    stss.subs.Add(len);
-    m_segments.Add(stss);
-
-    STSEntry sub;
-    sub.str = str;
-    sub.fUnicode = fUnicode;
-    sub.style = style;
-    sub.actor = actor;
-    sub.effect = effect;
-    sub.marginRect = marginRect;
-    sub.layer = layer;
-    sub.start = start;
-    sub.end = end;
-    sub.readorder = m_entries.GetCount();
-    CSTSArray::Add(sub);
-*/
 }
 
 void CSimpleTextSubtitle::AddSTSEntryOnly( CStringW str, bool fUnicode, int start, int end, CString style /*= _T("Default")*/, const CString& actor /*= _T("")*/, const CString& effect /*= _T("")*/, const CRect& marginRect /*= CRect(0,0,0,0)*/, int layer /*= 0*/, int readorder /*= -1*/ )
 {
-	if (start > end) return;
-	bool all_whitespace = true;
-	for (int i = 0; i < str.GetLength(); i++) {
-		if (!CStringW::StrTraits::IsSpace(str[i])) {
-			all_whitespace = false;
-			break;
-		}
-	}
-	if (all_whitespace) return;
+    FastTrim(str);
+    if (str.IsEmpty() || start > end) return;
 
     str.Remove('\r');
     str.Replace(L"\n", L"\\N");
@@ -2197,66 +2139,67 @@ void CSimpleTextSubtitle::AddSTSEntryOnly( CStringW str, bool fUnicode, int star
     style.TrimLeft('*');
 
     STSEntry sub;
-    sub.str = str;
-    sub.fUnicode = fUnicode;
-    sub.style = style;
-    sub.actor = actor;
-    sub.effect = effect;
+    sub.str        = str;
+    sub.fUnicode   = fUnicode;
+    sub.style      = style;
+    sub.actor      = actor;
+    sub.effect     = effect;
     sub.marginRect = marginRect;
-    sub.layer = layer;
-    sub.start = start;
-    sub.end = end;
-    sub.readorder = readorder < 0 ? m_entries.GetCount() : readorder;
+    sub.layer      = layer;
+    sub.start      = start;
+    sub.end        = end;
+    sub.readorder  = readorder < 0 ? m_entries.GetCount() : readorder;
     m_entries.Add(sub);
     return;
 }
 
 STSStyle* CSimpleTextSubtitle::CreateDefaultStyle(int CharSet)
 {
-    STSStyle* ret = NULL;
-
-    if(!m_styles.Lookup(g_default_style, ret))
-    {
-        STSStyle* style = new STSStyle();
-        style->charSet = CharSet;
-        AddStyle(g_default_style, style);
-        m_styles.Lookup(g_default_style, ret);
-
-        m_fUsingAutoGeneratedDefaultStyle = true;
-    }
-    else
-    {
-        m_fUsingAutoGeneratedDefaultStyle = false;
-    }
-
-    return ret;
+    m_defaultStyle = STSStyle();
+    m_defaultStyle.charSet = CharSet;
+    return &m_defaultStyle;
 }
 
 void CSimpleTextSubtitle::ChangeUnknownStylesToDefault()
 {
     CAtlMap<CString, STSStyle*, CStringElementTraits<CString> > unknown;
     bool fReport = true;
-
+    CString last_style = _T("!@dkdfjlakfkjjklezdv^5132ae");
+    bool last_style_changed_to_unknow = false;
     for(size_t i = 0; i < m_entries.GetCount(); i++)
     {
         STSEntry& stse = m_entries.GetAt(i);
 
         STSStyle* val;
-        if(!m_styles.Lookup(stse.style, val))
+        if (last_style == stse.style)
         {
-            if(!unknown.Lookup(stse.style, val))
+            // simple heuristic rule: the style is likely to be the same as the last one,
+            // then there is no need to query the map
+            if (last_style_changed_to_unknow)
             {
-                if(fReport)
+                stse.style = g_default_style;
+            }
+        }
+        else
+        {
+            last_style = stse.style;
+            last_style_changed_to_unknow = !m_styles.Lookup(stse.style, val);
+            if (last_style_changed_to_unknow)
+            {
+                if(!unknown.Lookup(stse.style, val))
                 {
-                    CString msg;
-                    msg.Format(_T("Unknown style found: \"%s\", changed to \"Default\"!\n\nPress Cancel to ignore further warnings."), stse.style);
-                    if(MessageBox(NULL, msg, _T("Warning"), MB_OKCANCEL|MB_ICONWARNING) != IDOK) fReport = false;
+                    if(fReport && stse.style!=g_default_style)
+                    {
+                        CString msg;
+                        msg.Format(_T("Unknown style found: \"%s\", changed to \"Default\"!\n\nPress Cancel to ignore further warnings."), stse.style);
+                        if(MessageBox(NULL, msg, _T("Warning"), MB_OKCANCEL|MB_ICONWARNING) != IDOK) fReport = false;
+                    }
+
+                    unknown[stse.style] = NULL;
                 }
 
-                unknown[stse.style] = NULL;
+                stse.style = g_default_style;
             }
-
-            stse.style = g_default_style;
         }
     }
 }
@@ -2285,7 +2228,7 @@ void CSimpleTextSubtitle::AddStyle(CString name, STSStyle* style)
 
         CString name2 = name_str;
 
-        if(i < len && _stscanf(name_str.Right(len-i), _T("%d"), &idx) == 1)
+        if(i < len && _stscanf_s(name_str.Right(len-i), _T("%d"), &idx) == 1)
         {
             name2 = name_str.Left(i);
         }
@@ -2305,9 +2248,9 @@ void CSimpleTextSubtitle::AddStyle(CString name, STSStyle* style)
         m_styles.RemoveKey(name);
         m_styles[name3] = val;
 
-        for(i = 0, j = m_entries.GetCount(); i < j; i++)
+        for (size_t j = 0, count = m_entries.GetCount(); j < count; j++)
         {
-            STSEntry& stse = m_entries.GetAt(i);
+            STSEntry& stse = m_entries.GetAt(j);
             if(stse.style == name) stse.style = name3;
         }
     }
@@ -2317,30 +2260,21 @@ void CSimpleTextSubtitle::AddStyle(CString name, STSStyle* style)
 
 bool CSimpleTextSubtitle::SetDefaultStyle(STSStyle& s)
 {
-    DbgLog((LOG_TRACE, 3, "%s(%d): %s", __FILE__, __LINE__, __FUNCTION__));
-    DbgLog((LOG_TRACE, 3, "\tm_styles count:%d", m_styles.GetCount()));
-    STSStyle* val;
-    if(!m_styles.Lookup(g_default_style, val)) return false;
-    DbgLog((LOG_TRACE, 3, "\tm_styles Lookup Default succeed"));
+    LogStyles(m_styles);
 
-#ifdef DEBUG
-    for(POSITION pos=m_styles.GetStartPosition(); pos!=NULL;)
-    {
-        DbgLog((LOG_TRACE, 3, _T("\tm_styles[%s]"), (LPCTSTR)m_styles.GetNextKey(pos)));
-    }
-#endif
-
-    *val = s;
-    m_fUsingAutoGeneratedDefaultStyle = false;
+    m_defaultStyle = s;
     return true;
 }
 
 bool CSimpleTextSubtitle::GetDefaultStyle(STSStyle& s)
 {
-    STSStyle* val;
-    if(!m_styles.Lookup(g_default_style, val)) return false;
-    s = *val;
+    s = m_defaultStyle;
     return true;
+}
+
+void CSimpleTextSubtitle::SetForceDefaultStyle( bool value )
+{
+    m_fForcedDefaultStyle = value;
 }
 
 void CSimpleTextSubtitle::ConvertToTimeBased(double fps)
@@ -2423,6 +2357,7 @@ const STSSegment* CSimpleTextSubtitle::SearchSubs(int t, double fps, /*[out]*/ i
     {
         if(iSegment!=NULL)
             *iSegment = 0;
+        TRACE_SUB("No subtitles at "<<XY_LOG_VAR_2_STR(t));
         return NULL;
     }
 
@@ -2454,6 +2389,7 @@ const STSSegment* CSimpleTextSubtitle::SearchSubs(int t, double fps, /*[out]*/ i
     {
         return &m_segments[j];
     }
+    TRACE_SUB("No subtitles at "<<XY_LOG_VAR_2_STR(t));
     return(NULL);
 }
 
@@ -2501,11 +2437,10 @@ STSSegment* CSimpleTextSubtitle::SearchSubs2(int t, double fps, /*[out]*/ int* i
     return(NULL);
 }
 
-
-
 int CSimpleTextSubtitle::TranslateStart(int i, double fps)
 {
-    return(i < 0 || m_entries.GetCount() <= i ? -1 :
+    int n = m_entries.GetCount();
+    return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_entries.GetAt(i).start :
         m_mode == FRAME ? (int)(m_entries.GetAt(i).start*1000/fps) :
         0);
@@ -2513,7 +2448,8 @@ int CSimpleTextSubtitle::TranslateStart(int i, double fps)
 
 int CSimpleTextSubtitle::TranslateEnd(int i, double fps)
 {
-    return(i < 0 || m_entries.GetCount() <= i ? -1 :
+    int n = m_entries.GetCount();
+    return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_entries.GetAt(i).end :
         m_mode == FRAME ? (int)(m_entries.GetAt(i).end*1000/fps) :
         0);
@@ -2521,7 +2457,8 @@ int CSimpleTextSubtitle::TranslateEnd(int i, double fps)
 
 int CSimpleTextSubtitle::TranslateSegmentStart(int i, double fps)
 {
-    return(i < 0 || m_segments.GetCount() <= i ? -1 :
+    int n = m_segments.GetCount();
+    return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_segments[i].start :
         m_mode == FRAME ? (int)(m_segments[i].start*1000/fps) :
         0);
@@ -2529,7 +2466,8 @@ int CSimpleTextSubtitle::TranslateSegmentStart(int i, double fps)
 
 int CSimpleTextSubtitle::TranslateSegmentEnd(int i, double fps)
 {
-    return(i < 0 || m_segments.GetCount() <= i ? -1 :
+    int n = m_segments.GetCount();
+    return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_segments[i].end :
         m_mode == FRAME ? (int)(m_segments[i].end*1000/fps) :
         0);
@@ -2537,7 +2475,8 @@ int CSimpleTextSubtitle::TranslateSegmentEnd(int i, double fps)
 
 void CSimpleTextSubtitle::TranslateSegmentStartEnd(int i, double fps, /*out*/int& start, /*out*/int& end)
 {
-    if(i < 0 || m_segments.GetCount() <= i)
+    int n = m_segments.GetCount();
+    if(i < 0 || n <= i)
     {
         start=-1;
         end=-1;
@@ -2558,18 +2497,20 @@ void CSimpleTextSubtitle::TranslateSegmentStartEnd(int i, double fps, /*out*/int
 }
 
 STSStyle* CSimpleTextSubtitle::GetStyle(int i)
-{    
+{
     STSStyle* style = NULL;
-    m_styles.Lookup(m_entries.GetAt(i).style, style);
-
-    STSStyle* defstyle = NULL;
-    m_styles.Lookup(g_default_style, defstyle);
-
-    if(!style)
+    if (!m_fForcedDefaultStyle)
     {
-        style = defstyle;
+        if (!m_styles.Lookup(m_entries.GetAt(i).style, style) &&
+            !m_styles.Lookup(         g_default_style, style))
+        {
+            style = &m_defaultStyle;
+        }
     }
-
+    else
+    {
+        style = &m_defaultStyle;
+    }
     ASSERT(style);
 
     return style;
@@ -2577,27 +2518,7 @@ STSStyle* CSimpleTextSubtitle::GetStyle(int i)
 
 bool CSimpleTextSubtitle::GetStyle(int i, STSStyle* const stss)
 {
-    STSStyle* style = NULL;
-    m_styles.Lookup(m_entries.GetAt(i).style, style);
-
-    STSStyle* defstyle = NULL;
-    m_styles.Lookup(g_default_style, defstyle);
-
-    if(!style)
-    {
-        if(!defstyle)
-        {
-            defstyle = CreateDefaultStyle(DEFAULT_CHARSET);
-        }
-
-        style = defstyle;
-    }
-
-    if(!style) {ASSERT(0); return false;}
-
-    *stss = *style;
-    if(stss->relativeTo == 2 && defstyle)
-        stss->relativeTo = defstyle->relativeTo;
+    *stss = *GetStyle(i);
 
     return true;
 }
@@ -2629,46 +2550,36 @@ void CSimpleTextSubtitle::ConvertUnicode(int i, bool fUnicode)
     }
 }
 
-CStringA CSimpleTextSubtitle::GetStrA(int i, bool fSSA)
-{
-    return(WToA(GetStrWA(i, fSSA)));
-}
-
 CStringW CSimpleTextSubtitle::GetStrW(int i, bool fSSA)
 {
-    bool fUnicode = IsEntryUnicode(i);
+    STSEntry const& stse = m_entries.GetAt(i);
     int CharSet = GetCharSet(i);
 
-    CStringW str = m_entries.GetAt(i).str;
+    CStringW str = stse.str;
 
-    if(!fUnicode)
+    if(!stse.fUnicode)
         str = MBCSSSAToUnicode(str, CharSet);
 
     if(!fSSA)
-        str = RemoveSSATags(str, fUnicode, CharSet);
+        str = RemoveSSATags(str, true, CharSet);
 
-    return(str);
+    return str;
 }
 
 CStringW CSimpleTextSubtitle::GetStrWA(int i, bool fSSA)
 {
-    bool fUnicode = IsEntryUnicode(i);
+    STSEntry const& stse = m_entries.GetAt(i);
     int CharSet = GetCharSet(i);
 
-    CStringW str = m_entries.GetAt(i).str;
+    CStringW str = stse.str;
 
-    if(fUnicode)
+    if(stse.fUnicode)
         str = UnicodeSSAToMBCS(str, CharSet);
 
     if(!fSSA)
-        str = RemoveSSATags(str, fUnicode, CharSet);
+        str = RemoveSSATags(str, false, CharSet);
 
-    return(str);
-}
-
-void CSimpleTextSubtitle::SetStr(int i, CStringA str, bool fUnicode)
-{
-    SetStr(i, AToW(str), false);
+    return str;
 }
 
 void CSimpleTextSubtitle::SetStr(int i, CStringW str, bool fUnicode)
@@ -2762,21 +2673,7 @@ void CSimpleTextSubtitle::CreateSegments()
                 m_segments.Add(tempSegments[i]);
     }
     OnChanged();
-/*
-    for(i = 0, j = m_segments.GetCount(); i < j; i++)
-    {
-        STSSegment& stss = m_segments[i];
-
-        TRACE(_T("%d - %d"), stss.start, stss.end);
-
-        for(int k = 0, l = stss.subs.GetCount(); k < l; k++)
-        {
-            TRACE(_T(", %d"), stss.subs[k]);
-        }
-
-        TRACE(_T("\n"));
-    }
-*/
+    LogSegments(m_segments);
 }
 
 bool CSimpleTextSubtitle::Open(CString fn, int CharSet, CString name)
@@ -2797,11 +2694,10 @@ bool CSimpleTextSubtitle::Open(CString fn, int CharSet, CString name)
     return(Open(&f, CharSet, name));
 }
 
-static int CountLines(CTextFile* f, ULONGLONG from, ULONGLONG to)
+static size_t CountLines(CTextFile* f, ULONGLONG from, ULONGLONG to, CString& s = CString())
 {
-    int n = 0;
-    CString s;
-    f->Seek(from, 0);
+    size_t n = 0;
+    f->Seek(from, CFile::begin);
     while(f->ReadString(s) && f->GetPosition() < to) n++;
     return(n);
 }
@@ -2826,24 +2722,25 @@ bool CSimpleTextSubtitle::Open(CTextFile* f, int CharSet, CString name)
              TEXT("OpenUSF"),
              TEXT("OpenMPL2"),
              TEXT("OpenRealText")};
-         CAutoTiming t(func_name[i],0);
-
+        XY_LOG_INFO("Open '"<<f->GetFilePath().GetString()<<"' with "<<func_name[i]<<" begin" );
         if(!OpenFuncts[i].open(f, *this, CharSet) /*|| !GetCount()*/)
         {
             if(m_entries.GetCount() > 0)
             {
-                int n = CountLines(f, pos, f->GetPosition());
-                CString s;
-                s.Format(_T("Syntax error at line %d!\t"), n+1);
-                AfxMessageBox(s, MB_OK|MB_ICONERROR);
+                CString lastLine;
+                size_t n = CountLines(f, pos, f->GetPosition(), lastLine);
+                CString msg;
+                msg.Format(_T("Unable to parse the subtitle file. Syntax error at line %Iu:\n\"%s\""), n + 1, lastLine);
+                AfxMessageBox(msg, MB_OK | MB_ICONERROR);
                 Empty();
                 break;
             }
 
-            f->Seek(pos, 0);
+            f->Seek(pos, CFile::begin);
             Empty();
             continue;
         }
+        XY_LOG_INFO("Open '"<<f->GetFilePath().GetString()<<"' with "<<func_name[i]<<" succeeded" );
 
         m_name = name;
         m_mode = OpenFuncts[i].mode;
@@ -2856,8 +2753,6 @@ bool CSimpleTextSubtitle::Open(CTextFile* f, int CharSet, CString name)
 
         //      Sort();
         CreateSegments();
-
-        CreateDefaultStyle(CharSet);
 
         ChangeUnknownStylesToDefault();
 
@@ -3080,9 +2975,9 @@ bool CSimpleTextSubtitle::SaveAs(CString fn, exttype et, double fps, CTextFile::
             str2.Format(fmt,
                 hh1, mm1, ss1, ms1/10,
                 hh2, mm2, ss2, ms2/10,
-                TToW(stse.style), TToW(stse.actor),
+                stse.style, stse.actor,
                 stse.marginRect.left, stse.marginRect.right, (stse.marginRect.top + stse.marginRect.bottom) / 2,
-                TToW(stse.effect), str);
+                stse.effect, str);
         }
         else if(et == EXTASS)
         {
@@ -3091,9 +2986,9 @@ bool CSimpleTextSubtitle::SaveAs(CString fn, exttype et, double fps, CTextFile::
                 stse.layer,
                 hh1, mm1, ss1, ms1/10,
                 hh2, mm2, ss2, ms2/10,
-                TToW(stse.style), TToW(stse.actor),
+                stse.style, stse.actor,
                 stse.marginRect.left, stse.marginRect.right, (stse.marginRect.top + stse.marginRect.bottom) / 2,
-                TToW(stse.effect), str);
+                stse.effect, str);
         }
 
         f.WriteString(str2);
@@ -3107,7 +3002,7 @@ bool CSimpleTextSubtitle::SaveAs(CString fn, exttype et, double fps, CTextFile::
     }
 
     STSStyle* s;
-    if(!m_fUsingAutoGeneratedDefaultStyle && m_styles.Lookup(g_default_style, s) && et != EXTSSA && et != EXTASS)
+    if (m_styles.Lookup(g_default_style, s) && et != EXTSSA && et != EXTASS)
     {
         CTextFile f;
         if(!f.Save(fn + _T(".style"), e))
@@ -3175,87 +3070,91 @@ STSStyle::STSStyle()
 
 void STSStyle::SetDefault()
 {
-    marginRect = CRect(20, 20, 20, 20);
-    scrAlignment = 2;
-    borderStyle = 0;
+    marginRect    = CRect(20, 20, 20, 20);
+    scrAlignment  = 2;
+    borderStyle   = 0;
     outlineWidthX = outlineWidthY = 2;
-    shadowDepthX = shadowDepthY = 3;
-    colors[0] = 0x00ffffff;
-    colors[1] = 0x0000ffff;
-    colors[2] = 0x00000000;
-    colors[3] = 0x00000000;
-    alpha[0] = 0x00;
-    alpha[1] = 0x00;
-    alpha[2] = 0x00;
-    alpha[3] = 0x80;
-    charSet = DEFAULT_CHARSET;
-    fontName = _T("Arial");
-    fontSize = 18;
-    fontScaleX = fontScaleY = 100;
-    fontSpacing = 0;
-    fontWeight = FW_BOLD;
-    fItalic = false;
-    fUnderline = false;
-    fStrikeOut = false;
-    fBlur = 0;
+    shadowDepthX  = shadowDepthY = 3;
+    colors[0]     = 0x00ffffff;
+    colors[1]     = 0x0000ffff;
+    colors[2]     = 0x00000000;
+    colors[3]     = 0x00000000;
+    alpha[0]      = 0x00;
+    alpha[1]      = 0x00;
+    alpha[2]      = 0x00;
+    alpha[3]      = 0x80;
+    charSet       = DEFAULT_CHARSET;
+    fontName      = _T("Arial");
+    fontSize      = 18;
+    fontScaleX    = fontScaleY = 100;
+    fontSpacing   = 0;
+    fontWeight    = FW_BOLD;
+    fItalic       = false;
+    fUnderline    = false;
+    fStrikeOut    = false;
+    fBlur         = 0;
     fGaussianBlur = 0;
-    fontShiftX = fontShiftY = fontAngleZ = fontAngleX = fontAngleY = 0;
-    relativeTo = 2;
+    fontShiftX    = 
+    fontShiftY    = 
+    fontAngleZ    = 
+    fontAngleX    = 
+    fontAngleY    = 0;
+    relativeTo    = 2;
 }
 
-bool STSStyle::operator == (const STSStyle& s)const
+bool STSStyle::operator == (const STSStyle& s) const
 {
-    return(marginRect == s.marginRect
-        && scrAlignment == s.scrAlignment
-        && borderStyle == s.borderStyle
-        && outlineWidthX == s.outlineWidthX
-        && outlineWidthY == s.outlineWidthY
-        && shadowDepthX == s.shadowDepthX
-        && shadowDepthY == s.shadowDepthY
+    return(marginRect          == s.marginRect
+        && scrAlignment        == s.scrAlignment
+        && borderStyle         == s.borderStyle
+        && outlineWidthX       == s.outlineWidthX
+        && outlineWidthY       == s.outlineWidthY
+        && shadowDepthX        == s.shadowDepthX
+        && shadowDepthY        == s.shadowDepthY
         && *((int*)&colors[0]) == *((int*)&s.colors[0])
         && *((int*)&colors[1]) == *((int*)&s.colors[1])
         && *((int*)&colors[2]) == *((int*)&s.colors[2])
         && *((int*)&colors[3]) == *((int*)&s.colors[3])
-        && alpha[0] == s.alpha[0]
-        && alpha[1] == s.alpha[1]
-        && alpha[2] == s.alpha[2]
-        && alpha[3] == s.alpha[3]
-        && fBlur == s.fBlur
-        && fGaussianBlur == s.fGaussianBlur
-        && relativeTo == s.relativeTo
+        && alpha[0]            == s.alpha[0]
+        && alpha[1]            == s.alpha[1]
+        && alpha[2]            == s.alpha[2]
+        && alpha[3]            == s.alpha[3]
+        && fBlur               == s.fBlur
+        && fGaussianBlur       == s.fGaussianBlur
+        && relativeTo          == s.relativeTo
         && IsFontStyleEqual(s));
 }
 
 bool STSStyle::IsFontStyleEqual(const STSStyle& s) const
 {
     return(
-        charSet == s.charSet
-        && fontName == s.fontName
-        && fontSize == s.fontSize
-        && fontScaleX == s.fontScaleX
-        && fontScaleY == s.fontScaleY
+        charSet        == s.charSet
+        && fontName    == s.fontName
+        && fontSize    == s.fontSize
+        && fontScaleX  == s.fontScaleX
+        && fontScaleY  == s.fontScaleY
         && fontSpacing == s.fontSpacing
-        && fontWeight == s.fontWeight
-        && fItalic == s.fItalic
-        && fUnderline == s.fUnderline
-        && fStrikeOut == s.fStrikeOut
-        && fontAngleZ == s.fontAngleZ
-        && fontAngleX == s.fontAngleX
-        && fontAngleY == s.fontAngleY
-        && fontShiftX == s.fontShiftX
-        && fontShiftY == s.fontShiftY);
+        && fontWeight  == s.fontWeight
+        && fItalic     == s.fItalic
+        && fUnderline  == s.fUnderline
+        && fStrikeOut  == s.fStrikeOut
+        && fontAngleZ  == s.fontAngleZ
+        && fontAngleX  == s.fontAngleX
+        && fontAngleY  == s.fontAngleY
+        && fontShiftX  == s.fontShiftX
+        && fontShiftY  == s.fontShiftY);
 }
 
 void STSStyle::operator = (const LOGFONT& lf)
 {
-    charSet = lf.lfCharSet;
-    fontName = lf.lfFaceName;
-    HDC hDC = GetDC(0);
-    fontSize = -MulDiv(lf.lfHeight, 72, GetDeviceCaps(hDC, LOGPIXELSY));
+    charSet    = lf.lfCharSet;
+    fontName   = lf.lfFaceName;
+    HDC hDC    = GetDC(0);
+    fontSize   = -MulDiv(lf.lfHeight, 72, GetDeviceCaps(hDC, LOGPIXELSY));
     ReleaseDC(0, hDC);
 //  fontAngleZ = (float)(1.0*lf.lfEscapement/10);
     fontWeight = lf.lfWeight;
-    fItalic = !!lf.lfItalic;
+    fItalic    = !!lf.lfItalic;
     fUnderline = !!lf.lfUnderline;
     fStrikeOut = !!lf.lfStrikeOut;
 }
@@ -3267,8 +3166,8 @@ LOGFONTA& operator <<= (LOGFONTA& lfa, const STSStyleBase& s)
     HDC hDC = GetDC(0);
     lfa.lfHeight = -MulDiv((int)(s.fontSize+0.5), GetDeviceCaps(hDC, LOGPIXELSY), 72);
     ReleaseDC(0, hDC);
-    lfa.lfWeight = s.fontWeight;
-    lfa.lfItalic = s.fItalic?-1:0;
+    lfa.lfWeight    = s.fontWeight;
+    lfa.lfItalic    = s.fItalic?-1:0;
     lfa.lfUnderline = s.fUnderline?-1:0;
     lfa.lfStrikeOut = s.fStrikeOut?-1:0;
     return(lfa);
@@ -3281,8 +3180,8 @@ LOGFONTW& operator <<= (LOGFONTW& lfw, const STSStyleBase& s)
     HDC hDC = GetDC(0);
     lfw.lfHeight = -MulDiv((int)(s.fontSize+0.5), GetDeviceCaps(hDC, LOGPIXELSY), 72);
     ReleaseDC(0, hDC);
-    lfw.lfWeight = s.fontWeight;
-    lfw.lfItalic = s.fItalic?-1:0;
+    lfw.lfWeight    = s.fontWeight;
+    lfw.lfItalic    = s.fItalic?-1:0;
     lfw.lfUnderline = s.fUnderline?-1:0;
     lfw.lfStrikeOut = s.fStrikeOut?-1:0;
     return(lfw);
@@ -3318,23 +3217,23 @@ STSStyle& operator <<= (STSStyle& s, const CString& style)
 
     try
     {
-        CStringW str = TToW(style);
+        CStringW str = style;
         if(str.Find(';')>=0)
         {
             CRect tmp_rect;
-            tmp_rect.left = GetInt(str,';'); tmp_rect.right = GetInt(str,';'); tmp_rect.top = GetInt(str,';'); tmp_rect.bottom = GetInt(str,';');
+            tmp_rect.left = GetInt(str,L';'); tmp_rect.right = GetInt(str,L';'); tmp_rect.top = GetInt(str,L';'); tmp_rect.bottom = GetInt(str,L';');
             s.marginRect = tmp_rect;
-            s.scrAlignment = GetInt(str,';'); s.borderStyle = GetInt(str,';');
-            s.outlineWidthX = GetFloat(str,';'); s.outlineWidthY = GetFloat(str,';'); s.shadowDepthX = GetFloat(str,';'); s.shadowDepthY = GetFloat(str,';');
-            for(int i = 0; i < 4; i++) s.colors[i] = (COLORREF)GetInt(str,';');
-            for(int i = 0; i < 4; i++) s.alpha[i] = GetInt(str,';');
-            s.charSet = GetInt(str,';');
-            s.fontName = WToT(GetStr(str,';')); s.fontSize = GetFloat(str,';');
-            s.fontScaleX = GetFloat(str,';'); s.fontScaleY = GetFloat(str,';');
-            s.fontSpacing = GetFloat(str,';'); s.fontWeight = GetInt(str,';');
-            s.fItalic = !!GetInt(str,';'); s.fUnderline = !!GetInt(str,';'); s.fStrikeOut = !!GetInt(str,';'); s.fBlur = GetFloat(str,';'); s.fGaussianBlur = GetFloat(str,';');
-            s.fontAngleZ = GetFloat(str,';'); s.fontAngleX = GetFloat(str,';'); s.fontAngleY = GetFloat(str,';');
-            s.relativeTo = GetInt(str,';');
+            s.scrAlignment = GetInt(str,L';'); s.borderStyle = GetInt(str,L';');
+            s.outlineWidthX = GetFloat(str,L';'); s.outlineWidthY = GetFloat(str,L';'); s.shadowDepthX = GetFloat(str,L';'); s.shadowDepthY = GetFloat(str,L';');
+            for(size_t i = 0; i < 4; i++) s.colors[i] = (COLORREF)GetInt(str,L';');
+            for(size_t i = 0; i < 4; i++) s.alpha[i] = GetInt(str,L';');
+            s.charSet     = GetInt(str,L';');
+            s.fontName    = GetStr(str,L';');   s.fontSize   = GetFloat(str,L';');
+            s.fontScaleX  = GetFloat(str,L';'); s.fontScaleY = GetFloat(str,L';');
+            s.fontSpacing = GetFloat(str,L';'); s.fontWeight = GetInt  (str,L';');
+            s.fItalic     = !!GetInt(str,L';'); s.fUnderline = !!GetInt(str,L';'); s.fStrikeOut = !!GetInt(str,L';'); s.fBlur = GetFloat(str,L';'); s.fGaussianBlur = GetFloat(str,L';');
+            s.fontAngleZ  = GetFloat(str,L';'); s.fontAngleX = GetFloat(str,L';'); s.fontAngleY = GetFloat(str,L';');
+            s.relativeTo  = GetInt(str,L';');
         }
     }
     catch(...)
@@ -3343,40 +3242,4 @@ STSStyle& operator <<= (STSStyle& s, const CString& style)
     }
 
     return(s);
-}
-
-static bool OpenRealText(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
-{
-    wstring szFile;
-
-    CStringW buff;
-    while(file->ReadString(buff))
-    {
-        buff.Trim();
-        if(buff.IsEmpty()) continue;
-
-        szFile += CStringW(_T("\n")) + buff.GetBuffer();
-    }
-
-    CRealTextParser RealTextParser;
-    if (!RealTextParser.ParseRealText(szFile))
-        return false;
-
-    CRealTextParser::Subtitles crRealText = RealTextParser.GetParsedSubtitles();
-
-    for (map<pair<int, int>, wstring>::const_iterator i = crRealText.m_mapLines.begin();
-         i != crRealText.m_mapLines.end();
-         ++i)
-    {
-        ret.Add(
-            SubRipper2SSA(i->second.c_str(), CharSet),
-            file->IsUnicode(),
-            i->first.first,
-            i->first.second);
-    }
-
-//  std::wofstream wofsOut(L"c:/zzz.srt");
-//  RealTextParser.OutputSRT(wofsOut);
-
-    return(!ret.IsEmpty());
 }

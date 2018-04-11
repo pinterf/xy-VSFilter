@@ -29,8 +29,11 @@ public:
 
     static XyBitmap *CreateBitmap(const CRect& target_rect, MemLayout layout);
 
+    static void FlipAlphaValue( LPVOID pixels, int w, int h, int pitch );
     static void AlphaBltPack(SubPicDesc& spd, POINT pos, SIZE size, LPCVOID pixels, int pitch);
     static void AlphaBltPlannar(SubPicDesc& spd, POINT pos, SIZE size, const XyPlannerFormatExtra& pixels, int pitch);
+
+    static void BltPack( SubPicDesc& spd, POINT pos, SIZE size, LPCVOID pixels, int pitch );
 private:
     static void ClearBitmap(XyBitmap *bitmap);
 };
@@ -50,14 +53,18 @@ public:
 public:
     XySubRenderFrame();
     ~XySubRenderFrame();
-    
+
     typedef ::boost::shared_ptr<XyBitmap> SharedBitmap;
+
+    void MoveTo(int x, int y);
 public:
     CAtlArray<SharedBitmap> m_bitmaps;
     CAtlArray<int> m_bitmap_ids;
     CRect m_output_rect;
     CRect m_clip_rect;
     XyColorSpace m_xy_color_space;
+
+    int m_left, m_top;
 };
 
 typedef ::boost::shared_ptr<XySubRenderFrame> SharedPtrXySubRenderFrame;
@@ -70,20 +77,27 @@ public:
     HRESULT SetOutputRect(const RECT& output_rect);
     HRESULT SetClipRect(const RECT& clip_rect);
     HRESULT SetColorSpace(XyColorSpace color_space);
+    HRESULT SetVsfilterCompactRgbCorrection(bool value);
+    HRESULT SetRgbOutputTvLevel(bool value);
 
     HRESULT GetOutputRect(RECT *output_rect);
     HRESULT GetClipRect(RECT *clip_rect);
     HRESULT GetColorSpace(XyColorSpace *color_space);
+    bool GetVsfilterCompactRgbCorrection();
+    bool GetRgbOutputTvLevel();
 
     XySubRenderFrame* NewXySubRenderFrame(UINT bitmap_count);
     XyBitmap* CreateBitmap(const RECT& target_rect);
     DWORD TransColor(DWORD argb);
 
-    XySubRenderFrameCreater():m_xy_color_space(XY_CS_ARGB), m_bitmap_layout(XyBitmap::PACK){}
+    XySubRenderFrameCreater():m_xy_color_space(XY_CS_ARGB), m_bitmap_layout(XyBitmap::PACK)
+        , m_vsfilter_compact_rgb_correction(false), m_rgb_output_tv_level(false){}
 private:
     CRect m_output_rect;
     CRect m_clip_rect;
     XyColorSpace m_xy_color_space;
+    bool m_vsfilter_compact_rgb_correction;
+    bool m_rgb_output_tv_level;
     XyBitmap::MemLayout m_bitmap_layout;
 };
 

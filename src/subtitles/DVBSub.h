@@ -34,9 +34,10 @@ public:
     ~CDVBSub(void);
 
     virtual HRESULT         ParseSample(IMediaSample* pSample);
+    virtual void            EndOfStream();
     virtual void            Render(SubPicDesc& spd, REFERENCE_TIME rt, RECT& bbox);
     virtual HRESULT         GetTextureSize(POSITION pos, SIZE& MaxTextureSize, SIZE& VideoSize, POINT& VideoTopLeft);
-    virtual POSITION        GetStartPosition(REFERENCE_TIME rt, double fps);
+    virtual POSITION        GetStartPosition(REFERENCE_TIME rt, double fps = 0);
     virtual POSITION        GetNext(POSITION pos);
     virtual REFERENCE_TIME  GetStart(POSITION nPos);
     virtual REFERENCE_TIME  GetStop(POSITION nPos);
@@ -64,7 +65,7 @@ public:
     enum DVB_PAGE_STATE {
         DPS_NORMAL          = 0x00,
         DPS_ACQUISITION     = 0x01,
-        DPS_MODE            = 0x02,
+        DPS_MODE_CHANGE     = 0x02,
         DPS_RESERVED        = 0x03
     };
 
@@ -212,6 +213,6 @@ private:
     HRESULT             ParseClut(CGolombBuffer& gb, WORD wSegLength);
     HRESULT             ParseObject(CGolombBuffer& gb, WORD wSegLength);
 
+    HRESULT             EnqueuePage(REFERENCE_TIME rtStop);
     HRESULT             UpdateTimeStamp(REFERENCE_TIME rtStop);
-
 };

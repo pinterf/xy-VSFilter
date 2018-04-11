@@ -19,19 +19,23 @@ typedef ::boost::shared_ptr<DrawItemHashKey> SharedPtrDrawItemHashKey;
 struct DrawItem
 {
 public:
-    SharedPtrOverlayPaintMachine overlay_paint_machine;
+    SharedPtrOverlayPaintMachine  overlay_paint_machine;
     CRect clip_rect;
     SharedPtrCClipperPaintMachine clipper;
-    int xsub;
-    int ysub;
+    int   xsub;
+    int   ysub;
     DWORD switchpts[6];
-    bool fBody;
-    bool fBorder;
+    bool  fBody;
+    bool  fBorder;
+
+    bool  use_addition_draw;
 
     SharedPtrDrawItemHashKey m_key;
 public:
     CRectCoor2 GetDirtyRect();
-    static CRectCoor2 Draw( XyBitmap *bitmap, DrawItem& draw_item, const CRectCoor2& clip_rect );
+    static CRectCoor2 Draw        ( XyBitmap *bitmap, DrawItem& draw_item, const CRectCoor2& clip_rect );
+    static CRectCoor2 AlphaBltDraw( XyBitmap *bitmap, DrawItem& draw_item, const CRectCoor2& clip_rect );
+    static CRectCoor2 AdditionDraw( XyBitmap *bitmap, DrawItem& draw_item, const CRectCoor2& clip_rect );
     const SharedPtrDrawItemHashKey& GetHashKey();
 
     static DrawItem* CreateDrawItem(const SharedPtrOverlayPaintMachine& overlay_paint_machine,
@@ -58,7 +62,7 @@ public:
     SharedPtrDrawItem shadow;
     SharedPtrDrawItem outline;
     SharedPtrDrawItem body;
-public:    
+public:
     static CRectCoor2 GetDirtyRect( CompositeDrawItem& item );
 
     static void Draw(XySubRenderFrame**output, CompositeDrawItemListList& compDrawItemListList);
@@ -71,7 +75,7 @@ public:
     CRectCoor2 clip_rect;
 public:
     void Draw(SharedPtrXyBitmap *bitmap, int *bitmap_identity_num);
-	
+
     void CreateHashKey(GroupedDrawItemsHashKey *key);
 };
 

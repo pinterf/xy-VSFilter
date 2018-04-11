@@ -22,28 +22,45 @@
 #pragma once
 
 #include <afx.h>
+#include <vector>
 
-class CTextFile : protected CStdioFile
+#include "StdioFile64.h"
+
+class CTextFile : protected CStdioFile64
 {
 public:
-	typedef enum {ASCII, UTF8, LE16, BE16, ANSI} enc;
+    enum enc {
+        DEFAULT_ENCODING,
+        UTF8,
+        LE16,
+        BE16
+    };
 
 private:
 	enc m_encoding, m_defaultencoding;
 	int m_offset;
 
+	unsigned char m_readbuffer[4096];
+	size_t m_bufferPos;
+	size_t m_bufferCount;
+	std::vector<wchar_t> m_convertedBuffer;
+
+	enum charerror {CHARERR_NEED_MORE=-1, CHARERR_REOPEN=-2};
+
+	int NextChar();
+	bool ReadLine();
+
 public:
-	CTextFile(enc e = ASCII);
+	CTextFile(enc e = DEFAULT_ENCODING);
 
 	virtual bool Open(LPCTSTR lpszFileName);
-	virtual bool Save(LPCTSTR lpszFileName, enc e /*= ASCII*/);
+	virtual bool Save(LPCTSTR lpszFileName, enc e /*= DEFAULT_ENCODING*/);
 
 	void SetEncoding(enc e);
 	enc GetEncoding();
 	bool IsUnicode();
 
 	// CFile
-	virtual UINT Read(void* lpBuf, UINT nCount);
 	CString GetFilePath() const;
 
 	// CStdioFile
@@ -52,13 +69,8 @@ public:
 	ULONGLONG GetLength() const;
 	ULONGLONG Seek(LONGLONG lOff, UINT nFrom);
 
-	void WriteString(LPCSTR lpsz/*CStringA str*/);
 	void WriteString(LPCWSTR lpsz/*CStringW str*/);
-	BOOL ReadString(CStringA& str);
 	BOOL ReadString(CStringW& str);
-
-protected:
-    virtual bool ReopenAsText();
 };
 
 class CWebTextFile : public CTextFile
@@ -67,16 +79,9 @@ class CWebTextFile : public CTextFile
 	CString m_tempfn;
 
 public:
-    CWebTextFile(CTextFile::enc e = ASCII, LONGLONG llMaxSize = 1024 * 1024);
+    CWebTextFile(CTextFile::enc e = DEFAULT_ENCODING, LONGLONG llMaxSize = 1024 * 1024);
 
 	bool Open(LPCTSTR lpszFileName);
-	bool Save(LPCTSTR lpszFileName, enc e /*= ASCII*/);
+	bool Save(LPCTSTR lpszFileName, enc e /*= DEFAULT_ENCODING*/);
 	void Close();
 };
-
-CStringW AToW(const CStringA& str);
-CStringA WToA(const CStringW& str);
-CString  AToT(const CStringA& str);
-CString  WToT(const CStringW& str);
-CStringA TToA(const CString&  str);
-CStringW TToW(const CString&  str);

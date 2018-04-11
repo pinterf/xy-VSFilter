@@ -31,6 +31,7 @@
 #include <initguid.h>
 #include "..\..\..\..\include\moreuuids.h"
 #include <algorithm>
+#include "xy_logger.h"
 
 #pragma warning(pop) 
 
@@ -160,7 +161,6 @@ CBaseVideoFilter::CBaseVideoFilter(TCHAR* pName, LPUNKNOWN lpunk, HRESULT* phr, 
 	m_hout = m_hin = m_h = 0;
 	m_arxout = m_arxin = m_arx = 0;
 	m_aryout = m_aryin = m_ary = 0;
-	m_cfout = m_cfin = m_cf = 0;
 }
 
 CBaseVideoFilter::~CBaseVideoFilter()
@@ -242,31 +242,6 @@ HRESULT CBaseVideoFilter::GetDeliveryBuffer(int w, int h, IMediaSample** ppOut)
 	return S_OK;
 }
 
-// Checks if the filter connected to the output pin possibly works with
-// extended format control flags. Returns true if it is the case,
-// false otherwise.
-bool CBaseVideoFilter::ConnectionWhitelistedForExtendedFormat()
-{
-	CLSID clsid = GetCLSID(m_pOutput->GetConnected());
-	bool ret = false;
-
-	// The white list
-	static const CLSID whitelist[] = {
-		CLSID_VideoMixingRenderer,
-		CLSID_VideoMixingRenderer9,
-		CLSID_EnhancedVideoRenderer,
-		CLSID_madVR
-	};
-
-	// Check if the CLSID matches to anything on the white list
-	for (int i = 0; i < countof(whitelist); ++i) {
-		if (clsid == whitelist[i])
-			ret = true;
-	}
-
-	return ret;
-}
-
 HRESULT CBaseVideoFilter::ReconnectOutput(int w, int h)
 {
 	CMediaType& mt = m_pOutput->CurrentMediaType();
@@ -283,9 +258,8 @@ HRESULT CBaseVideoFilter::ReconnectOutput(int w, int h)
 	}
 
 	HRESULT hr = S_OK;
-	bool extformat = ConnectionWhitelistedForExtendedFormat();
 
-	if(fForceReconnection || m_w != m_wout || m_h != m_hout || m_arx != m_arxout || m_ary != m_aryout || (extformat && m_cf != m_cfout))
+	if(fForceReconnection || m_w != m_wout || m_h != m_hout || m_arx != m_arxout || m_ary != m_aryout)
 	{
 		if(GetCLSID(m_pOutput->GetConnected()) == CLSID_VideoRenderer)
 		{
@@ -312,7 +286,6 @@ HRESULT CBaseVideoFilter::ReconnectOutput(int w, int h)
 			bmi = &vih->bmiHeader;
 			vih->dwPictAspectRatioX = m_arx;
 			vih->dwPictAspectRatioY = m_ary;
-			if (extformat) vih->dwControlFlags = m_cf;
 		}
 
 		bmi->biWidth = m_w;
@@ -350,7 +323,6 @@ HRESULT hr1 = 0, hr2 = 0;
 		m_hout = m_h;
 		m_arxout = m_arx;
 		m_aryout = m_ary;
-		m_cfout = m_cf;
 
 		// some renderers don't send this
 		NotifyEvent(EC_VIDEO_SIZE_CHANGED, MAKELPARAM(m_w, m_h), 0);
@@ -519,9 +491,8 @@ HRESULT CBaseVideoFilter::CheckTransform(const CMediaType* mtIn, const CMediaTyp
 {
     if (GetInputSubtypePosition(mtIn->subtype)<0 || GetOutputSubtypePosition(mtOut->subtype)<0)
         return VFW_E_TYPE_NOT_ACCEPTED;
-
     bool can_transform = true;
-    if( mtIn->subtype == MEDIASUBTYPE_YV12
+    if( mtIn->subtype == MEDIASUBTYPE_YV12 
         || mtIn->subtype == MEDIASUBTYPE_I420 
         || mtIn->subtype == MEDIASUBTYPE_IYUV )
     {
@@ -579,21 +550,22 @@ HRESULT CBaseVideoFilter::CheckReconnect( const CMediaType* mtIn, const CMediaTy
         hr = GetMediaType(position, &desiredMt);
         if (hr!=S_OK)
         {
-            //log
+            XY_LOG_ERROR(_T("Unexpected error when GetMediaType.")<<XY_LOG_VAR_2_STR(position));
         }
         else
         {
             hr = CheckTransform(&desiredMt, mtOut);
             if (hr!=S_OK)
             {
-                //log
+                XY_LOG_DEBUG(_T("Transform not accept.")<<XY_LOG_VAR_2_STR(GuidNames[desiredMt.subtype])
+                    <<XY_LOG_VAR_2_STR(GuidNames[mtOut->subtype]));
             }
             else
             {
                 hr = m_pInput->GetConnected()->QueryAccept(&desiredMt);
                 if(hr!=S_OK)
                 {
-                    //log
+                    XY_LOG_DEBUG(_T("Upstream not accept.")<<XY_LOG_VAR_2_STR(GuidNames[desiredMt.subtype]));
                 }
                 else
                 {
@@ -688,8 +660,6 @@ HRESULT CBaseVideoFilter::GetMediaType(int iPosition, CMediaType* pmt)
 	bihOut.biCompression = m_outputFmt[iPosition/2]->biCompression;
 	bihOut.biSizeImage = w*h*bihOut.biBitCount>>3;
 
-    const CMediaType& mt = m_pInput->CurrentMediaType();
-
 	if(iPosition&1)
 	{
 		pmt->formattype = FORMAT_VideoInfo;
@@ -707,8 +677,10 @@ HRESULT CBaseVideoFilter::GetMediaType(int iPosition, CMediaType* pmt)
 		vih->bmiHeader = bihOut;
 		vih->dwPictAspectRatioX = arx;
 		vih->dwPictAspectRatioY = ary;
-		vih->dwInterlaceFlags = ((VIDEOINFOHEADER2*)mt.Format())->dwInterlaceFlags;
+		if(IsVideoInterlaced()) vih->dwInterlaceFlags = AMINTERLACE_IsInterlaced;
 	}
+
+	CMediaType& mt = m_pInput->CurrentMediaType();
 
 	// these fields have the same field offset in all four structs
 	((VIDEOINFOHEADER*)pmt->Format())->AvgTimePerFrame = ((VIDEOINFOHEADER*)mt.Format())->AvgTimePerFrame;
@@ -767,15 +739,6 @@ HRESULT CBaseVideoFilter::SetMediaType(PIN_DIRECTION dir, const CMediaType* pmt)
 		m_aryin = m_ary;
 		GetOutputSize(m_w, m_h, m_arx, m_ary);
 
-		m_cf = 0;
-		if (pmt->formattype == FORMAT_VideoInfo2)
-		{
-			VIDEOINFOHEADER2* vih = (VIDEOINFOHEADER2*)pmt->Format();
-			if (vih->dwControlFlags & (AMCONTROL_USED | AMCONTROL_COLORINFO_PRESENT))
-				m_cf = vih->dwControlFlags & (0xFFFFFF00 | AMCONTROL_USED | AMCONTROL_COLORINFO_PRESENT);
-		}
-		m_cfin = m_cf;
-
 		DWORD a = m_arx, b = m_ary;
 		while(a) {int tmp = a; a = b % tmp; b = tmp;}
 		if(b) m_arx /= b, m_ary /= b;
@@ -818,9 +781,11 @@ void CBaseVideoFilter::InitOutputColorSpaces()
         //log
     }
     m_outputFmtCount = count;
+    XY_LOG_DEBUG(XY_LOG_VAR_2_STR(m_outputFmtCount));
     for (UINT i=0;i<count;i++)
     {
         m_outputFmt[i] = OutputFmts + preferredOrder[i];
+        XY_LOG_DEBUG(i<<" "<<CStringA(OutputFmt2String(*m_outputFmt[i])));
     }
 }
 

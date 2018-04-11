@@ -1,12 +1,8 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
       <Configuration>Debug</Configuration>
-      <Platform>Win32</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release log|Win32">
-      <Configuration>Release log</Configuration>
       <Platform>Win32</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|Win32">
@@ -15,10 +11,6 @@
     </ProjectConfiguration>
     <ProjectConfiguration Include="Debug|x64">
       <Configuration>Debug</Configuration>
-      <Platform>x64</Platform>
-    </ProjectConfiguration>
-    <ProjectConfiguration Include="Release log|x64">
-      <Configuration>Release log</Configuration>
       <Platform>x64</Platform>
     </ProjectConfiguration>
     <ProjectConfiguration Include="Release|x64">
@@ -39,12 +31,6 @@
     <ConfigurationType>StaticLibrary</ConfigurationType>
     <UseOfMfc>Static</UseOfMfc>
     <CharacterSet>Unicode</CharacterSet>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release log|x64'">
-    <PlatformToolset>v141_xp</PlatformToolset>
-  </PropertyGroup>
-  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release log|Win32'">
-    <PlatformToolset>v141_xp</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <PlatformToolset>v141_xp</PlatformToolset>
@@ -68,7 +54,6 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
     <IncludePath>$(SolutionDir)src\filters\transform\vsfilter\;$(SolutionDir)include\;$(SolutionDir)src\thirdparty\log4cplus\include\;$(SolutionDir)src\thirdparty\boost_lib\;$(IncludePath)</IncludePath>
-    <TargetName Condition="'$(Configuration)'=='Release log'">$(ProjectName)RL</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -82,6 +67,7 @@
     </Lib>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="alpha_blender.cpp" />
     <ClCompile Include="color_conv_table.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -106,8 +92,11 @@
     <ClCompile Include="SubPicProviderExWrapper.cpp" />
     <ClCompile Include="SubPicProviderImpl.cpp" />
     <ClCompile Include="SubPicQueueImpl.cpp" />
+    <ClCompile Include="XySubRenderFrameWrapper.cpp" />
+    <ClCompile Include="XySubRenderProviderWrapper.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="alpha_blender.h" />
     <ClInclude Include="color_conv_table.h" />
     <ClInclude Include="CoordGeom.h" />
     <ClInclude Include="CRect2.h" />
@@ -127,6 +116,8 @@
     <ClInclude Include="SubPicProviderExWrapper.h" />
     <ClInclude Include="SubPicProviderImpl.h" />
     <ClInclude Include="SubPicQueueImpl.h" />
+    <ClInclude Include="XySubRenderFrameWrapper.h" />
+    <ClInclude Include="XySubRenderProviderWrapper.h" />
     <ClInclude Include="xy_intrinsics.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

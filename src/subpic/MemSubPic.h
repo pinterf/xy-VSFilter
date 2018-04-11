@@ -67,8 +67,11 @@ public:
 
     // ISubPicEx
     STDMETHODIMP CopyTo(ISubPicEx* pSubPic);
-    STDMETHODIMP Unlock(CAtlList<CRect>* dirtyRectList);
+    STDMETHODIMP UnlockEx(CAtlList<CRect>* dirtyRectList);
     STDMETHODIMP SetDirtyRectEx(CAtlList<CRect>* dirtyRectList);
+
+    //
+    HRESULT FlipAlphaValue(const CRect& dirtyRect);
 
 protected:
     bool converted;
@@ -91,6 +94,8 @@ protected:
     HRESULT UnlockOther(CAtlList<CRect>* dirtyRectList);
 
     void SubsampleAndInterlace( const CRect& cRect, bool u_first );
+
+    friend class XySubRenderFrameWrapper;
 };
 
 // CMemSubPicAllocator

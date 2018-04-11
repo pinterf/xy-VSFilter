@@ -34,7 +34,8 @@ enum ColorType {
     MSP_YV12,
     MSP_IYUV,
     MSP_AYUV,
-    MSP_RGBA,
+    MSP_RGBA,        //pre-multiplied alpha. Use A*g + RGB to mix
+    MSP_RGBA_F,      //pre-multiplied alpha. Use (0xff-A)*g + RGB to mix
     MSP_AYUV_PLANAR, //AYUV in planar form
     MSP_XY_AUYV,
     MSP_P010,
@@ -47,7 +48,7 @@ enum ColorType {
 struct SubPicDesc {
 	int type;
 	int w, h, bpp, pitch, pitchUV;
-	void* bits;
+	BYTE* bits;
 	BYTE* bitsU;
 	BYTE* bitsV;
 	RECT vidrect; // video rectangle
@@ -106,7 +107,7 @@ public ISubPic {
     STDMETHOD (GetDirtyRects) (CAtlList<const CRect>& dirtyRectList /*[out]*/) const PURE;
     STDMETHOD (SetDirtyRectEx) (CAtlList<CRect>* dirtyRectList /*[in]*/) PURE;
     
-	STDMETHOD (Unlock) (CAtlList<CRect>* dirtyRectList /*[in]*/) PURE;
+	STDMETHOD (UnlockEx) (CAtlList<CRect>* dirtyRectList /*[in]*/) PURE;
 };
 
 //

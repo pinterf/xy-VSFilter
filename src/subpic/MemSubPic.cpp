@@ -23,7 +23,7 @@
 #include "MemSubPic.h"
 #include "color_conv_table.h"
 
-#if 0
+#ifdef SPD_DUMP_FILE
 #include <fstream>
 //
 // debug functions
@@ -256,7 +256,7 @@ STDMETHODIMP CMemSubPic::ClearDirtyRect(DWORD color)
 {
     if(m_rectListDirty.IsEmpty()) {
         return S_OK;
-	}
+    }
     while(!m_rectListDirty.IsEmpty())
     {
         //pDirtyRect = m_rectListDirty.RemoveHead();
@@ -298,7 +298,8 @@ STDMETHODIMP CMemSubPic::ClearDirtyRect(DWORD color)
             }
         }
     }
-	m_rectListDirty.RemoveAll();
+    m_rectListDirty.RemoveAll();
+    ONCER( SaveArgb2File(m_spd, CRect(CPoint(0,0), m_size), SPD_DUMP_FILE".argb_c") );
     return S_OK;
 }
 
@@ -307,7 +308,7 @@ STDMETHODIMP CMemSubPic::Lock(SubPicDesc& spd)
     return GetDesc(spd);
 }
 
-STDMETHODIMP CMemSubPic::Unlock( CAtlList<CRect>* dirtyRectList )
+STDMETHODIMP CMemSubPic::UnlockEx( CAtlList<CRect>* dirtyRectList )
 {
     int src_type = m_spd.type;
     int dst_type = m_alpha_blt_dst_type;
@@ -390,8 +391,6 @@ HRESULT CMemSubPic::UnlockOther(CAtlList<CRect>* dirtyRectList)
         }
         else if(m_alpha_blt_dst_type == MSP_YUY2)
         {
-            XY_DO_ONCE( xy_logger::write_file("G:\\b1_ul", top, m_spd.pitch*(h-1)) );
-
             for(BYTE* tempTop=top; tempTop < bottom ; tempTop += m_spd.pitch)
             {
                 BYTE* s = tempTop;
@@ -407,8 +406,6 @@ HRESULT CMemSubPic::UnlockOther(CAtlList<CRect>* dirtyRectList)
                     last_u = s[6];
                 }
             }
-
-            XY_DO_ONCE( xy_logger::write_file("G:\\a1_ul", top, m_spd.pitch*(h-1)) );
         }
         else if(m_alpha_blt_dst_type == MSP_YV12 || m_alpha_blt_dst_type == MSP_IYUV 
             || m_alpha_blt_dst_type == MSP_AYUV)
@@ -431,12 +428,12 @@ HRESULT CMemSubPic::UnlockOther(CAtlList<CRect>* dirtyRectList)
 HRESULT CMemSubPic::UnlockRGBA_YUV(CAtlList<CRect>* dirtyRectList)
 {
     //debug
-    ONCER( SaveRect2File(dirtyRectList->GetHead(), "F:/mplayer_MinGW_full/MinGW/home/Administrator/xy_vsfilter/debug.rect") );
-    ONCER( SaveArgb2File(m_spd, CRect(CPoint(0,0), m_size), "F:/mplayer_MinGW_full/MinGW/home/Administrator/xy_vsfilter/debug.argb") );
+    ONCER( SaveRect2File(dirtyRectList->GetHead(), SPD_DUMP_FILE".rect") );
+    ONCER( SaveArgb2File(m_spd, CRect(CPoint(0,0), m_size), SPD_DUMP_FILE".argb") );
 
     SetDirtyRectEx(dirtyRectList);
 
-    ONCER( SaveRect2File(dirtyRectList->GetHead(), "F:/mplayer_MinGW_full/MinGW/home/Administrator/xy_vsfilter/debug.rect2") );
+    ONCER( SaveRect2File(dirtyRectList->GetHead(), SPD_DUMP_FILE".rect2") );
     if(m_rectListDirty.IsEmpty()) {
         return S_OK;
     }
@@ -501,7 +498,7 @@ HRESULT CMemSubPic::UnlockRGBA_YUV(CAtlList<CRect>* dirtyRectList)
         }
     }
     
-    ONCER( SaveAxxx2File(m_spd, CRect(CPoint(0,0), m_size), "F:/mplayer_MinGW_full/MinGW/home/Administrator/xy_vsfilter/debug.axuv") );
+    ONCER( SaveAxxx2File(m_spd, CRect(CPoint(0,0), m_size), SPD_DUMP_FILE".axuv") );
     return S_OK;
 }
 
@@ -980,7 +977,7 @@ HRESULT CMemSubPic::AlphaBltAxyuAxyv_Yv12(const RECT* pSrc, const RECT* pDst, Su
 
 HRESULT CMemSubPic::AlphaBltAxyuAxyv_Nv12(const RECT* pSrc, const RECT* pDst, SubPicDesc* pTarget)
 {
-    ONCER( SaveArgb2File(*pTarget, CRect(CPoint(0,0), m_size), "F:/mplayer_MinGW_full/MinGW/home/Administrator/xy_vsfilter/debug.nv12") );
+    ONCER( SaveArgb2File(*pTarget, CRect(CPoint(0,0), m_size), SPD_DUMP_FILE".nv12") );
     const SubPicDesc& src = m_spd;
     SubPicDesc dst = *pTarget; // copy, because we might modify it
 
@@ -1070,7 +1067,7 @@ HRESULT CMemSubPic::AlphaBltAxyuAxyv_Nv12(const RECT* pSrc, const RECT* pDst, Su
         }
     }
     
-    ONCER( SaveArgb2File(*pTarget, CRect(CPoint(0,0), m_size), "F:/mplayer_MinGW_full/MinGW/home/Administrator/xy_vsfilter/debug.nv12_2") );
+    ONCER( SaveArgb2File(*pTarget, CRect(CPoint(0,0), m_size), SPD_DUMP_FILE".nv12_2") );
     return S_OK;
 }
 
@@ -1567,6 +1564,26 @@ void CMemSubPic::AlphaBlt_YUY2(int w, int h, BYTE* d, int dstpitch, PCUINT8 s, i
 #else
     AlphaBlt_YUY2_MMX(w, h, d, dstpitch, s, srcpitch);
 #endif
+}
+
+HRESULT CMemSubPic::FlipAlphaValue( const CRect& dirtyRect )
+{
+    ONCER( SaveArgb2File(m_spd, CRect(CPoint(0,0), m_size), SPD_DUMP_FILE".argb_f") );
+    XY_LOG_TRACE(dirtyRect);
+    const CRect& cRect = dirtyRect;
+    int w = cRect.Width(), h = cRect.Height();
+    if (w<=0 || h<=0)
+    {
+        return S_OK;
+    }
+    ASSERT(m_spd.type == MSP_RGBA);
+    if(m_spd.type != MSP_RGBA)
+    {
+        XY_LOG_ERROR("Unexpected color type "<<m_spd.type);
+    }
+    BYTE* top = (BYTE*)m_spd.bits + m_spd.pitch*(cRect.top) + cRect.left*4;
+    XyBitmap::FlipAlphaValue(top, w, h, m_spd.pitch);
+    return S_OK;
 }
 
 //

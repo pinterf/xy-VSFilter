@@ -159,10 +159,10 @@ STDMETHODIMP CSubPicImplHelper::SetSize(SIZE size, RECT vidrect)
 	}
 
 	if(m_size.cx != size.cx || m_size.cy != size.cy) {
-		m_vidrect.top = MulDiv(m_vidrect.top, m_size.cx, size.cx);
-		m_vidrect.bottom = MulDiv(m_vidrect.bottom, m_size.cx, size.cx);
-		m_vidrect.left = MulDiv(m_vidrect.left, m_size.cy, size.cy);
-		m_vidrect.right = MulDiv(m_vidrect.right, m_size.cy, size.cy);
+        m_vidrect.top    = MulDiv(m_vidrect.top, m_size.cx, size.cx);
+        m_vidrect.bottom = MulDiv(m_vidrect.bottom, m_size.cx, size.cx);
+        m_vidrect.left   = MulDiv(m_vidrect.left, m_size.cy, size.cy);
+        m_vidrect.right  = MulDiv(m_vidrect.right, m_size.cy, size.cy);
 	}
 	m_VirtualTextureSize = m_size;
 
@@ -279,11 +279,11 @@ STDMETHODIMP CSubPicExImpl::Unlock( RECT* pDirtyRect /*[in]*/ )
     {
         CAtlList<CRect> tmp;
         tmp.AddTail(*pDirtyRect);
-        return Unlock(&tmp);
+        return UnlockEx(&tmp);
     }
     else
     {
-        return Unlock( reinterpret_cast<CAtlList<CRect>*>(NULL) );
+        return UnlockEx( reinterpret_cast<CAtlList<CRect>*>(NULL) );
     }
 }
 

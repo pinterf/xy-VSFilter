@@ -25,10 +25,14 @@
 #include "IDirectVobSubXy.h"
 #include "..\..\..\..\include\IFilterVersion.h"
 #include "version.h"
+#include "XyOptionsImpl.h"
 
-class CDirectVobSub : public IDirectVobSub2, public IDirectVobSubXy, public IFilterVersion
+class DirectVobSubImpl : public IDirectVobSub2, public XyOptionsImpl, public IFilterVersion
 {
 public:
+    typedef XyOptionsImpl::Option Option;
+    typedef DirectVobSubXyOptions::SubStyle SubStyle;
+
     enum ColorSpaceOption
     {
         YuvMatrix_AUTO = 0
@@ -42,81 +46,74 @@ public:
         ,YuvRange_TV
         ,YuvRange_PC
     };
+    enum LoadLevel
+    {
+        LOADLEVEL_WHEN_NEEDED = 0,
+        LOADLEVEL_ALWAYS = 1,
+        LOADLEVEL_DISABLED = 2,
+        LOADLEVEL_COUNT
+    };
 
-    static const int REQUIRED_CONFIG_VERSION = 209;
+    static const int REQUIRED_CONFIG_VERSION = 706;
     static const int CUR_SUPPORTED_FILTER_VERSION = 39;
 
     typedef DirectVobSubXyOptions::CachesInfo CachesInfo;
     typedef DirectVobSubXyOptions::XyFlyWeightInfo XyFlyWeightInfo;
     typedef DirectVobSubXyOptions::ColorSpaceOpt ColorSpaceOpt;
+
+    struct FilterInfo
+    {
+        CStringW guid, friendly_name;
+    };
 protected:
-	CDirectVobSub();
-	virtual ~CDirectVobSub();
+    DirectVobSubImpl(const Option *options, CCritSec * pLock);
+    virtual ~DirectVobSubImpl();
 
     bool is_compatible();
     UINT GetCompatibleProfileInt(LPCTSTR lpszSection, LPCTSTR lpszEntry, int nDefault);
-protected:
-    CCritSec m_propsLock;
+    CString GetCompatibleProfileString(LPCTSTR lpszSection, LPCTSTR lpszEntry, LPCTSTR lpszDefault);
 
-	CString m_FileName;
-	int m_iSelectedLanguage;
-	bool m_fHideSubtitles;
-	bool m_fDoPreBuffering;
+    virtual HRESULT GetCurStyles(SubStyle sub_style[], int count) { return E_NOTIMPL; }
+    virtual HRESULT SetCurStyles(const SubStyle sub_style[], int count) { return E_NOTIMPL; }
+protected:
+    CCritSec *m_propsLock;
 
     int m_bt601Width, m_bt601Height;//for AUTO_GUESS
-
-	bool m_fOverridePlacement;
-	int	m_PlacementXperc, m_PlacementYperc;
-	bool m_fBufferVobSub, m_fOnlyShowForcedVobSubs, m_fPolygonize;
-	CSimpleTextSubtitle::EPARCompensationType m_ePARCompensationType;
 
     static int const MAX_COLOR_SPACE = 256;
     ColorSpaceOpt m_outputColorSpace[MAX_COLOR_SPACE];
     ColorSpaceOpt m_inputColorSpace[MAX_COLOR_SPACE];
-    
+
 	STSStyle m_defStyle;
 
 	bool m_fAdvancedRenderer;
-	bool m_fFlipPicture, m_fFlipSubtitles;
-	bool m_fOSD;
 	int m_nReloaderDisableCount;
 	int m_SubtitleDelay, m_SubtitleSpeedMul, m_SubtitleSpeedDiv;
-	bool m_fMediaFPSEnabled;
-	double m_MediaFPS;
-	bool m_fSaveFullPath;
 	NORMALIZEDRECT m_ZoomRect;
+
+    CAtlArray<CStringW> m_known_source_filters_guid;
+    CAtlArray<CStringW> m_known_source_filters_name;
 
     int m_supported_filter_verion;
     int m_config_info_version;
 
 	CComPtr<ISubClock> m_pSubClock;
-	bool m_fForced;
 
-    int m_xy_int_opt[DirectVobSubXyOptions::INT_COUNT];
-    bool m_xy_bool_opt[DirectVobSubXyOptions::BOOL_COUNT];
-    CSize m_xy_size_opt[DirectVobSubXyOptions::SIZE_COUNT];
-    CStringW m_xy_str_opt[DirectVobSubXyOptions::STRING_COUNT];
 public:
-    
-    // IDirectVobSubXy
+    static void LoadKnownSourceFilters( CAtlArray<CStringW> *filter_guid,
+                                        CAtlArray<CStringW> *filter_name );
+    static void SaveKnownSourceFilters( const CAtlArray<CStringW>& filter_guid, 
+                                        const CAtlArray<CStringW>& filter_name );
+public:
+    // XyOptionsImpl
+    HRESULT DoGetField(unsigned field, void *value);
+    HRESULT DoSetField(unsigned field, void const *value);
 
-    STDMETHODIMP XyGetBool     (int field, bool      *value);
-    STDMETHODIMP XyGetInt      (int field, int       *value);
-    STDMETHODIMP XyGetSize     (int field, SIZE      *value);
-    STDMETHODIMP XyGetRect     (int field, RECT      *value);
-    STDMETHODIMP XyGetUlonglong(int field, ULONGLONG *value);
-    STDMETHODIMP XyGetDouble   (int field, double    *value);
-    STDMETHODIMP XyGetString   (int field, LPWSTR    *value, int *chars);
-    STDMETHODIMP XyGetBin      (int field, LPVOID    *value, int *size );
+    // IXyOptions
+    STDMETHODIMP XyGetBin      (unsigned field, LPVOID    *value, int *size );
+    STDMETHODIMP XyGetBin2     (unsigned field, void      *value, int size );
 
-    STDMETHODIMP XySetBool     (int field, bool      value);
-    STDMETHODIMP XySetInt      (int field, int       value);
-    STDMETHODIMP XySetSize     (int field, SIZE      value);
-    STDMETHODIMP XySetRect     (int field, RECT      value);
-    STDMETHODIMP XySetUlonglong(int field, ULONGLONG value);
-    STDMETHODIMP XySetDouble   (int field, double    value);
-    STDMETHODIMP XySetString   (int field, LPWSTR    value, int chars);
-    STDMETHODIMP XySetBin      (int field, LPVOID    value, int size );
+    STDMETHODIMP XySetBin      (unsigned field, LPVOID    value, int size );
 
 	// IDirectVobSub
 
@@ -171,8 +168,6 @@ public:
 
     STDMETHOD (get_CachesInfo)(CachesInfo* caches_info);
     STDMETHOD (get_XyFlyWeightInfo)(XyFlyWeightInfo* xy_fw_info);
-    
-	STDMETHODIMP UpdateRegistry();
 
 	STDMETHODIMP HasConfigDialog(int iSelected);
 	STDMETHODIMP ShowConfigDialog(int iSelected, HWND hWndParent);
@@ -204,4 +199,24 @@ public:
 	// IFilterVersion
 	
 	STDMETHODIMP_(DWORD) GetFilterVersion();
+};
+
+// For DirectVobSubFilter
+class CDirectVobSub: public DirectVobSubImpl
+{
+public:
+    CDirectVobSub(const Option *options, CCritSec * pLock);
+
+protected:
+    STDMETHODIMP UpdateRegistry();
+};
+
+// For XySubFilter
+class CDVS4XySubFilter: public DirectVobSubImpl
+{
+public:
+    CDVS4XySubFilter(const Option *options, CCritSec * pLock);
+
+protected:
+    STDMETHODIMP UpdateRegistry();
 };

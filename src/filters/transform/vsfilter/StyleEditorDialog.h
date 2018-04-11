@@ -50,30 +50,32 @@ protected:
 	}
 };
 
-// CStyleEditorDialog dialog
+// CStyleEditorPPage Property Page
 
-class CStyleEditorDialog : public CDialog
+class CStyleEditorPPage : public CPropertyPage
 {
-	DECLARE_DYNAMIC(CStyleEditorDialog)
+	DECLARE_DYNAMIC(CStyleEditorPPage)
 
 	CString m_title;
-	CWnd* m_pParent;
 
 	void UpdateControlData(bool fSave);
 	void AskColor(int i);
 
 public:
-	CStyleEditorDialog(CString title, STSStyle* pstss, CWnd* pParent = NULL);   // standard constructor
-	virtual ~CStyleEditorDialog();
+    CStyleEditorPPage();
+    CStyleEditorPPage(CString title, const STSStyle* pstss);
+	virtual ~CStyleEditorPPage();
+
+    void init(CString title, const STSStyle* pstss);
 
 // Dialog Data
-	enum { IDD = IDD_STYLEDIALOG };
+	enum { IDD = IDD_STYLE_PAGE };
 
 	STSStyle m_stss;
 
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
-	virtual BOOL OnInitDialog();
+	virtual BOOL OnSetActive();
 	virtual void OnOK();
 
 	DECLARE_MESSAGE_MAP()
@@ -91,10 +93,10 @@ public:
 	int m_scaley;
 	CSpinButtonCtrl m_scaleyspin;
 	int m_borderstyle;
-	int m_borderwidth;
-	CSpinButtonCtrl m_borderwidthspin;
-	int m_shadowdepth;
-	CSpinButtonCtrl m_shadowdepthspin;
+    CString m_borderwidth_str;
+	double m_borderwidth;
+    CString m_shadowdepth_str;
+	double m_shadowdepth;
 	int m_screenalignment;
 	CRect m_margin;
 	CSpinButtonCtrl m_marginleftspin;
@@ -114,3 +116,5 @@ public:
 	afx_msg void OnBnClickedCheck1();
 	afx_msg void OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar);
 };
+
+// CStyleEditorDialog : CPropertySheet

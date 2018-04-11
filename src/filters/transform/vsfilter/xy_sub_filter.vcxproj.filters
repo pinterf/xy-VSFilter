@@ -20,22 +20,10 @@
     </ResourceCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Copy.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="csriapi.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="DirectVobSub.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="DirectVobSubFilter.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="DirectVobSubPropPage.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="plugins.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="StdAfx.cpp">
@@ -45,12 +33,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Systray.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="TextInputPin.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="vfr.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="VSFilter.cpp">
@@ -71,24 +53,27 @@
     <ClCompile Include="..\..\..\thirdparty\mfc\winmdi.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="xy_sub_filter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="SubRenderOptionsImpl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="XyOptionsImpl.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="DirectVobSubFilterDll.cpp">
+    <ClCompile Include="SubtitleInputPin2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="xy_sub_filter_dll.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="auto_load_helper.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="csri.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="DirectVobSub.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="DirectVobSubFilter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="DirectVobSubPropPage.h">
@@ -107,12 +92,6 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Systray.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="TextInputPin.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="vfr.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VSFilter.h">
@@ -139,16 +118,28 @@
     <ClInclude Include="XySubRenderIntf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="xy_sub_filter.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="SubRenderOptionsImpl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="XyOptionsImpl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SubtitleInputPin2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="auto_load_helper.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <None Include="VSFilter.def">
+    <None Include="xy_sub_filter.def">
       <Filter>Source Files</Filter>
+    </None>
+    <None Include="res\Icon_xy_sub_fillter.ico">
+      <Filter>Resource Files</Filter>
     </None>
     <None Include="res\Icon_147.ico">
       <Filter>Resource Files</Filter>

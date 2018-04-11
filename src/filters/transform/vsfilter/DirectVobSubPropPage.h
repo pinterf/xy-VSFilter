@@ -34,7 +34,7 @@ public:
 
 protected:
 	CComQIPtr<IDirectVobSub2> m_pDirectVobSub;
-    CComQIPtr<IDirectVobSubXy> m_pDirectVobSubXy;
+    CComQIPtr<IXyOptions> m_pDirectVobSubXy;
 
 	virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {return(false);}
 	virtual void UpdateObjectData(bool fSave) {}
@@ -80,7 +80,7 @@ class CDVSMainPPage : public CDVSBasePPage
 	CComboBox m_langs;
 	CButton m_oplacement;
 	CSpinButtonCtrl m_subposx, m_subposy;
-	CButton m_font, m_forcedsubs;
+	CButton m_styles, m_forcedsubs;
 	CButton m_AutoPARCompensation;
 	CComboBox m_PARCombo;
     CButton m_hide_tray_icon;
@@ -114,7 +114,7 @@ protected:
 	virtual void UpdateObjectData(bool fSave);
 
 public:
-    CDVSGeneralPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    CDVSGeneralPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR *pName = NAME("DirectVobSub Property Page (general settings)"));
 };
 
 [uuid("A8B25C0E-0894-4531-B668-AB1599FAF7F6")]
@@ -133,7 +133,7 @@ protected:
 	virtual void UpdateObjectData(bool fSave);
 
 public:
-    CDVSMiscPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    CDVSMiscPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR *pName = NAME("DirectVobSub Property Page (misc settings)"));
 };
 
 [uuid("ACE4747B-35BD-4e97-9DD7-1D4245B0695C")]
@@ -143,17 +143,14 @@ class CDVSTimingPPage : public CDVSBasePPage
 	bool m_fMediaFPSEnabled;
 	double m_MediaFPS;
 
-	CButton m_modfps;
-	CEdit m_fps;
 	CSpinButtonCtrl m_subdelay, m_subspeedmul, m_subspeeddiv;    
 
 protected:
-    virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
 	virtual void UpdateControlData(bool fSave);
 	virtual void UpdateObjectData(bool fSave);
 
 public:
-    CDVSTimingPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    CDVSTimingPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR *pName = NAME("DirectVobSub Timing Property Page"));
 };
 
 [uuid("69CE757B-E8C0-4B0A-9EA0-CEA284096F98")]
@@ -181,7 +178,7 @@ public:
 class CDVSAboutPPage : public CDVSBasePPage
 {
 public:
-    CDVSAboutPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    CDVSAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("About Property Page"));
     
     bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
 };
@@ -224,7 +221,7 @@ protected:
 	virtual void UpdateObjectData(bool fSave);
 
 public:
-    CDVSColorPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    CDVSColorPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR *pName = NAME("DirectVobSub Property Page (color settings)"));
     ~CDVSColorPPage();
 };
 
@@ -243,5 +240,140 @@ protected:
 	virtual void UpdateObjectData(bool fSave);
 
 public:
-    CDVSPathsPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    CDVSPathsPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName = NAME("DirectVobSub Paths Property Page"));
+};
+
+//
+// XySubFilter
+//
+[uuid("4514EFD4-E09B-4995-9668-143F12994FE7")]
+class CXySubFilterMainPPage : public CDVSBasePPage
+{
+    void FreeLangs(), AllocLangs(int nLangs);
+
+    WCHAR m_fn[MAX_PATH];
+    int m_iSelectedLanguage, m_nLangs;
+    WCHAR** m_ppLangs;
+    bool m_fOverridePlacement;
+    bool m_fHideTrayIcon;
+    int m_PlacementXperc, m_PlacementYperc;
+    STSStyle m_defStyle;
+    bool m_fForceDefaultStyle;
+    bool m_fOnlyShowForcedVobSubs;
+    CSimpleTextSubtitle::EPARCompensationType m_ePARCompensationType;
+    int m_LoadLevel;
+    bool m_fExternalLoad, m_fWebLoad, m_fEmbeddedLoad;
+
+    CEdit m_fnedit;
+    CComboBox m_langs;
+    CButton m_oplacement;
+    CSpinButtonCtrl m_subposx, m_subposy;
+    CButton m_styles, m_force_default_style, m_forcedsubs;
+    CButton m_hide_tray_icon;
+    CComboBox m_load;
+    CButton m_extload, m_webload, m_embload;
+protected:
+    virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    virtual void UpdateControlData(bool fSave);
+    virtual void UpdateObjectData(bool fSave);
+
+public:
+    CXySubFilterMainPPage(LPUNKNOWN lpunk, HRESULT* phr);
+    virtual ~CXySubFilterMainPPage();
+};
+
+[uuid("E7946C91-1083-4F0E-AC45-5CF6BE7DB4C7")]
+class CXySubFilterMorePPage : public CDVSBasePPage
+{
+    int m_overlay_cache_max_item_num, m_overlay_no_blur_cache_max_item_num, m_path_cache_max_item_num, 
+        m_scan_line_data_cache_max_item_num, m_subpixel_pos_level;
+    int m_layout_size_opt;
+    int m_yuv_matrix, m_yuv_range, m_rgb_level;
+    SIZE m_layout_size;
+
+    bool m_fHideSubtitles, m_fReloaderDisabled;
+    bool m_render_to_original_video_size;
+
+    int  m_cache_size, m_auto_cache_size;
+
+    CButton m_hidesub, m_autoreload, m_instupd;
+
+    CSpinButtonCtrl m_path_cache, m_scanline_cache, m_overlay_no_blur_cache, m_overlay_cache;
+
+    CSpinButtonCtrl m_layout_size_x, m_layout_size_y;
+    CComboBox m_combo_subpixel_pos, m_combo_layout_size_opt;
+    CButton m_checkbox_render_to_original_video_size;
+
+    CComboBox m_combo_yuv_matrix, m_combo_yuv_range, m_combo_rgb_level;
+    CEdit m_edit_cache_size;
+protected:
+    virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    virtual void UpdateControlData(bool fSave);
+    virtual void UpdateObjectData(bool fSave);
+
+public:
+    CXySubFilterMorePPage(LPUNKNOWN lpunk, HRESULT* phr);
+};
+
+[uuid("1438A8B4-E8AF-4A81-BCA8-970751A9EE82")]
+class CXySubFilterTimingPPage : public CDVSTimingPPage
+{
+public:
+    CXySubFilterTimingPPage(LPUNKNOWN lpunk, HRESULT* phr
+        , TCHAR *pName = NAME("XySubFilter Property Page (timing)"))
+        : CDVSTimingPPage(lpunk, phr, pName) {}
+};
+
+[uuid("26DD9A01-7F95-40DE-B53D-4B4CE4023280")]
+class CXySubFilterPathsPPage : public CDVSPathsPPage
+{
+public:
+    CXySubFilterPathsPPage(LPUNKNOWN lpunk, HRESULT* phr
+        , TCHAR* pName = NAME("XySubFilter Property Page (path)"))
+        : CDVSPathsPPage(lpunk, phr, pName) {}
+};
+
+[uuid("D0DE7ADC-7DC6-43EC-912D-ABD44D7453FB")]
+class CXySubFilterAboutPPage : public CDVSAboutPPage
+{
+public:
+    CXySubFilterAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("XySubFilter Property Page (about)"))
+        : CDVSAboutPPage(lpunk, phr, pName) {}
+};
+
+//
+// XySubFilterConsumer
+//
+[uuid("b7f66b77-10b9-48e4-be40-2e6e4d00292e")]
+class CXySubFilterConsumerGeneralPPage : public CDVSGeneralPPage
+{
+public:
+    CXySubFilterConsumerGeneralPPage(LPUNKNOWN lpunk, HRESULT* phr
+        , TCHAR *pName = NAME("XySubFilterConsumer Property Page (General)"))
+        : CDVSGeneralPPage(lpunk, phr, pName) {}
+};
+
+[uuid("f2609280-2d03-4251-a1e4-65b1aff9dafe")]
+class CXySubFilterConsumerMiscPPage : public CDVSMiscPPage
+{
+public:
+    CXySubFilterConsumerMiscPPage(LPUNKNOWN lpunk, HRESULT* phr
+        , TCHAR *pName = NAME("XySubFilterConsumer Property Page (Misc)"))
+        : CDVSMiscPPage(lpunk, phr, pName) {}
+};
+
+[uuid("2e714223-34bc-430d-b52a-5bd23ddbf049")]
+class CXySubFilterConsumerAboutPPage : public CDVSAboutPPage
+{
+public:
+    CXySubFilterConsumerAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("XySubFilterConsumer Property Page (about)"))
+        : CDVSAboutPPage(lpunk, phr, pName) {}
+};
+
+[uuid("c371c901-97eb-4bb4-b742-d53a0eaa7b3c")]
+class CXySubFilterConsumerColorPPage : public CDVSColorPPage
+{
+public:
+    CXySubFilterConsumerColorPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("XySubFilterConsumer Property Page (color)"))
+        : CDVSColorPPage(lpunk, phr, pName) {}
 };

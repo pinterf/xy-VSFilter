@@ -16,8 +16,6 @@
       <AdditionalDependencies Condition="'$(Configuration)'=='Debug' And '$(VisualStudioVersion)'&gt;'11.0'">strmbaseD.lib;dsutilD.lib;subtitlesD.lib;subpicD.lib;basevideofilterD.lib;libssfD.lib;KasumiD.lib;unrarD.lib;systemD.lib;dwmapi.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)'=='Release'">delayimp.lib;strmbaseR.lib;dsutilR.lib;subtitlesR.lib;subpicR.lib;basevideofilterR.lib;libssfR.lib;KasumiR.lib;unrarR.lib;systemR.lib;winmm.lib;dwmapi.lib</AdditionalDependencies>
       <AdditionalDependencies Condition="'$(Configuration)'=='Release' And '$(VisualStudioVersion)'&gt;'11.0'">delayimp.lib;strmbaseR.lib;dsutilR.lib;subtitlesR.lib;subpicR.lib;basevideofilterR.lib;libssfR.lib;KasumiR.lib;unrarR.lib;systemR.lib;winmm.lib;dwmapi.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)'=='Release log'">delayimp.lib;strmbaseR.lib;dsutilR.lib;subtitlesRL.lib;subpicRL.lib;basevideofilterRL.lib;libssfR.lib;log4cplus_staticRU.lib;KasumiR.lib;unrarR.lib;systemR.lib;winmm.lib</AdditionalDependencies>
-      <AdditionalDependencies Condition="'$(Configuration)'=='Release log' And '$(VisualStudioVersion)'&gt;'11.0'">delayimp.lib;strmbaseR.lib;dsutilR.lib;subtitlesRL.lib;subpicRL.lib;basevideofilterRL.lib;libssfR.lib;log4cplus_staticRU.lib;KasumiR.lib;unrarR.lib;systemR.lib;winmm.lib</AdditionalDependencies>
       <RegisterOutput>false</RegisterOutput>
     </Link>
     <ResourceCompile>
@@ -29,7 +27,7 @@
       <PreprocessorDefinitions>_USRDLL;ISOLATION_AWARE_ENABLED;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
   </ItemDefinitionGroup>
-  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release' Or '$(Configuration)'=='Release log'">
+  <ItemDefinitionGroup Condition="'$(Configuration)'=='Release'">
     <ClCompile>
       <IntrinsicFunctions>false</IntrinsicFunctions>
       <BufferSecurityCheck>false</BufferSecurityCheck>

@@ -58,9 +58,20 @@ LRESULT CALLBACK HookProc(UINT code, WPARAM wParam, LPARAM lParam)
 	return CallNextHookEx(g_hHook, code,  wParam, lParam);
 } 
 
+static BOOL CALLBACK enumWindowCallback(HWND hwnd, LPARAM lparam)
+{
+    HWND owner = (HWND)lparam;
+    if (owner == GetWindow(hwnd, GW_OWNER)) {
+        SetForegroundWindow(hwnd);
+        return FALSE;
+    }
+    return TRUE;
+}
+
 class CSystrayWindow : public CWnd
 {
 	SystrayIconData* m_tbid;
+    bool             m_properties_page_showing;
 
 	void StepSub(int dir)
 	{
@@ -83,7 +94,7 @@ class CSystrayWindow : public CWnd
 	}
 
 public:
-	CSystrayWindow(SystrayIconData* tbid) : m_tbid(tbid) {}
+	CSystrayWindow(SystrayIconData* tbid) : m_tbid(tbid),m_properties_page_showing(false) {}
 
 protected:
 	DECLARE_MESSAGE_MAP()
@@ -135,13 +146,14 @@ int CSystrayWindow::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
 void CSystrayWindow::OnClose()
 {
-	DestroyWindow();
+    XY_LOG_DEBUG("Systray close.");
+    DestroyWindow();
 }
 
 void CSystrayWindow::OnDestroy()
 {
 	NOTIFYICONDATA tnid; 
-    ZeroMemory(&tnid, sizeof(NOTIFYICONDATA));
+    SecureZeroMemory(&tnid, sizeof(NOTIFYICONDATA));
 	tnid.cbSize = sizeof(NOTIFYICONDATA); 
 	tnid.hWnd = m_hWnd;
 	tnid.uID = IDI_ICON1; 
@@ -174,15 +186,21 @@ LRESULT CSystrayWindow::OnTaskBarRestart(WPARAM, LPARAM)
 	if(m_tbid->fShowIcon)
 	{
 		NOTIFYICONDATA tnid; 
-        ZeroMemory(&tnid, sizeof(NOTIFYICONDATA));
+        SecureZeroMemory(&tnid, sizeof(NOTIFYICONDATA));
 		tnid.cbSize = sizeof(NOTIFYICONDATA); 
 		tnid.hWnd = m_hWnd; 
 		tnid.uID = IDI_ICON1; 
 		tnid.hIcon = (HICON)LoadIcon(AfxGetResourceHandle(), MAKEINTRESOURCE(IDI_ICON1));
 //		tnid.hIcon = (HICON)LoadImage(AfxGetResourceHandle(), MAKEINTRESOURCE(IDI_ICON1), IMAGE_ICON, 0, 0, LR_LOADTRANSPARENT);
 		tnid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP; 
-		tnid.uCallbackMessage = WM_NOTIFYICON; 
-		lstrcpyn(tnid.szTip, TEXT("DirectVobSub"), sizeof(tnid.szTip)); 
+		tnid.uCallbackMessage = WM_NOTIFYICON;
+        CComQIPtr<IXyOptions> dvs_xy = m_tbid->dvs;
+        LPWSTR name = NULL;
+        int chars = 0;
+        dvs_xy->XyGetString(DirectVobSubXyOptions::STRING_NAME, &name, &chars);
+        CStringW str_name(name, chars);
+        LocalFree(name);
+        lstrcpyn(tnid.szTip, str_name.GetString(), sizeof(tnid.szTip));
 
 		BOOL res = Shell_NotifyIcon(NIM_ADD, &tnid); 
 
@@ -205,33 +223,19 @@ LRESULT CSystrayWindow::OnNotifyIcon(WPARAM wParam, LPARAM lParam)
 	{
 		case WM_LBUTTONDBLCLK:
 		{
-			// IMPORTANT: we must not hold the graph at the same time as showing the property page 
-			// or else when closing the app the graph doesn't get released and dvobsub's JoinFilterGraph
-			// is never called to close us down.
-
-			CComPtr<IBaseFilter> pBF2;
-
-			BeginEnumFilters(m_tbid->graph, pEF, pBF)
-			{
-				if(!CComQIPtr<IDirectVobSub>(pBF))
-					continue;
-
-				if(CComQIPtr<IVideoWindow> pVW = m_tbid->graph) 
-				{
-					HWND hwnd;
-					if(SUCCEEDED(pVW->get_Owner((OAHWND*)&hwnd))
-					|| SUCCEEDED(pVW->get_MessageDrain((OAHWND*)&hwnd)))
-						hWnd = hwnd;
-				}
-
-				pBF2 = pBF;
-
-				break;
-			}
-			EndEnumFilters
-
-			if(pBF2)
-				ShowPPage(pBF2, hWnd);
+            if (!m_properties_page_showing)
+            {
+                m_properties_page_showing = true;
+                RECT desktopRect;
+                ::GetWindowRect(::GetDesktopWindow(), &desktopRect);
+                ::SetWindowPos(m_hWnd, 0, (desktopRect.right / 2) - 200, (desktopRect.bottom / 2) - 300, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+                ShowPPage(CComQIPtr<IBaseFilter>(m_tbid->dvs), hWnd);
+                m_properties_page_showing = false;
+            }
+            else
+            {
+                EnumThreadWindows(GetCurrentThreadId(), enumWindowCallback, (LPARAM)hWnd);
+            }
 		}
 		break;
 
@@ -337,13 +341,21 @@ LRESULT CSystrayWindow::OnNotifyIcon(WPARAM wParam, LPARAM lParam)
 
 DWORD CALLBACK SystrayThreadProc(void* pParam)
 {
-	AFX_MANAGE_STATE(AfxGetStaticModuleState());
+    XY_LOG_DEBUG(pParam);
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
-	CSystrayWindow wnd((SystrayIconData*)pParam);
-	if(!wnd.CreateEx(0, AfxRegisterWndClass(0), _T("DVSWND"), WS_OVERLAPPED, CRect(0, 0, 0, 0), NULL, 0, NULL))
-		return -1;
-
-	((SystrayIconData*)pParam)->hSystrayWnd = wnd.m_hWnd;
+    SystrayIconData *tbid = (SystrayIconData*)pParam;
+    ASSERT(tbid);
+    CSystrayWindow wnd(tbid);
+    if(!wnd.CreateEx(0, AfxRegisterWndClass(0), _T("DVSWND"), WS_OVERLAPPED, CRect(0, 0, 0, 0), NULL, 0, NULL))
+    {
+        tbid->WndCreatedEvent.Set();
+        XY_LOG_ERROR("Failed to create wnd.");
+        return -1;
+    }
+    tbid->hSystrayWnd = wnd.m_hWnd;
+    tbid->WndCreatedEvent.Set();
+    XY_LOG_INFO("Systray wnd created. "<<wnd.m_hWnd);
 
 	MSG msg;
 	while(GetMessage(&msg, NULL/*wnd.m_hWnd*/, 0, 0))
@@ -353,6 +365,40 @@ DWORD CALLBACK SystrayThreadProc(void* pParam)
 	}
 
 	return 0;
+}
+
+HANDLE CreateSystray( SystrayIconData *data )
+{
+    DWORD tid;
+    HANDLE ret = CreateThread(0, 0, SystrayThreadProc, data, 0, &tid);
+    WaitForSingleObject(data->WndCreatedEvent, INFINITE);
+    return ret;
+}
+
+void DeleteSystray(HANDLE *pSystrayThread, SystrayIconData* data )
+{
+    ASSERT(data&&pSystrayThread);
+    XY_LOG_INFO(XY_LOG_VAR_2_STR(*pSystrayThread)<<XY_LOG_VAR_2_STR(data->hSystrayWnd));
+    if (*pSystrayThread)
+    {
+        XY_LOG_INFO(data<<XY_LOG_VAR_2_STR(data->hSystrayWnd));
+        if (data->hSystrayWnd)
+        {
+            SendMessage(data->hSystrayWnd, WM_CLOSE, 0, 0);
+            if(WaitForSingleObject(*pSystrayThread, 10000) != WAIT_OBJECT_0)
+            {
+                XY_LOG_WARN(_T("CALL THE AMBULANCE!!!"));
+                TerminateThread(*pSystrayThread, (DWORD)-1);
+            }
+        }
+        else
+        {
+            XY_LOG_WARN(_T("CALL THE AMBULANCE!!!"));
+            TerminateThread(*pSystrayThread, (DWORD)-1);
+        }
+    }
+    data->hSystrayWnd = NULL;
+    *pSystrayThread = NULL;
 }
 
 // TODO: replace this function
@@ -395,8 +441,8 @@ static TCHAR* CallPPage(IFilterGraph* pGraph, int idx, HWND hWnd)
 		}
 		else
 		{
-			if(ret = new TCHAR[wcslen(wstr)+1])
-				_tcscpy(ret, CString(wstr));
+			if(ret = DEBUG_NEW TCHAR[wcslen(wstr)+1])
+				_tcscpy_s(ret, wcslen(wstr)+1, CString(wstr));
 		}
 	}
 

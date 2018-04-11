@@ -29,13 +29,6 @@
 #include "../../../subtitles/SSF.h"
 #include "../../../subpic/ISimpleSubPic.h"
 
-typedef struct
-{
-	HWND hSystrayWnd;
-	IFilterGraph* graph;
-	IDirectVobSub* dvs;
-	bool fRunOnce, fShowIcon;
-} SystrayIconData;
 
 /* This is for graphedit */
 
@@ -49,7 +42,6 @@ class CDirectVobSubFilter
 {
     friend class CTextInputPin;
 
-	CCritSec m_csQueueLock;
 	CComPtr<ISimpleSubPicProvider> m_simple_provider;
 
 	void InitSubPicQueue();
@@ -67,6 +59,8 @@ protected:
 	void GetOutputSize(int& w, int& h, int& arx, int& ary);
 	HRESULT Transform(IMediaSample* pIn);    
     HRESULT GetIsEmbeddedSubStream(int iSelected, bool *fIsEmbedded);
+
+    void UpdateLanguageCount();
 public:
     CDirectVobSubFilter(LPUNKNOWN punk, HRESULT* phr, const GUID& clsid = __uuidof(CDirectVobSubFilter));
 	virtual ~CDirectVobSubFilter();
@@ -97,36 +91,30 @@ public:
     void GetInputColorspaces(ColorSpaceId *preferredOrder, UINT *count);
     void GetOutputColorspaces(ColorSpaceId *preferredOrder, UINT *count);
 
-    // IDirectVobSubXy
-    STDMETHODIMP XySetBool     (int field, bool      value);
-    STDMETHODIMP XySetInt      (int field, int       value);
+    // XyOptionsImpl
+    virtual HRESULT OnOptionChanged(unsigned field);
+    virtual HRESULT DoGetField(unsigned field, void *value);
+
+    // IXyOptions
+    STDMETHODIMP XySetBool     (unsigned field, bool      value);
+    STDMETHODIMP XySetInt      (unsigned field, int       value);
+
+    // DirectVobSubImpl
+    HRESULT GetCurStyles( SubStyle sub_style[], int count );
+    HRESULT SetCurStyles( const SubStyle sub_style[], int count );
 
     // IDirectVobSub
-    STDMETHODIMP put_FileName(WCHAR* fn);
-	STDMETHODIMP get_LanguageCount(int* nLangs);
 	STDMETHODIMP get_LanguageName(int iLanguage, WCHAR** ppName);
-	STDMETHODIMP put_SelectedLanguage(int iSelected);
-    STDMETHODIMP put_HideSubtitles(bool fHideSubtitles);
 	STDMETHODIMP put_PreBuffering(bool fDoPreBuffering);
-
-    STDMETHODIMP put_Placement(bool fOverridePlacement, int xperc, int yperc);
-    STDMETHODIMP put_VobSubSettings(bool fBuffer, bool fOnlyShowForcedSubs, bool fPolygonize);
-    STDMETHODIMP put_TextSettings(void* lf, int lflen, COLORREF color, bool fShadow, bool fOutline, bool fAdvancedRenderer);
-    STDMETHODIMP put_SubtitleTiming(int delay, int speedmul, int speeddiv);
 
     STDMETHODIMP get_CachesInfo(CachesInfo* caches_info);
     STDMETHODIMP get_XyFlyWeightInfo(XyFlyWeightInfo* xy_fw_info);
 
-    STDMETHODIMP get_MediaFPS(bool* fEnabled, double* fps);
-    STDMETHODIMP put_MediaFPS(bool fEnabled, double fps);
-    STDMETHODIMP get_ZoomRect(NORMALIZEDRECT* rect);
-    STDMETHODIMP put_ZoomRect(NORMALIZEDRECT* rect);
 	STDMETHODIMP HasConfigDialog(int iSelected);
 	STDMETHODIMP ShowConfigDialog(int iSelected, HWND hWndParent);
 
 	// IDirectVobSub2
 	STDMETHODIMP put_TextSettings(STSStyle* pDefStyle);
-	STDMETHODIMP put_AspectRatioSettings(CSimpleTextSubtitle::EPARCompensationType* ePARCompensationType);
 
     // ISpecifyPropertyPages
     STDMETHODIMP GetPages(CAUUID* pPages);
@@ -199,15 +187,11 @@ private:
 
 	void SetupFRD(CStringArray& paths, CAtlArray<HANDLE>& handles);
 	DWORD ThreadProc();
-
 private:
 	HANDLE m_hSystrayThread;
 	SystrayIconData m_tbid;
 
 	VIDEOINFOHEADER2 m_CurrentVIH2;
-
-	//xy TIMING
-	long m_time_rasterization, m_time_alphablt;
 };
 
 /* The "auto-loading" version */
@@ -215,7 +199,7 @@ private:
 [uuid("9852A670-F845-491b-9BE6-EBD841B8A613")]
 class CDirectVobSubFilter2 : public CDirectVobSubFilter
 {
-	bool IsAppBlackListed();
+    bool IsAppBlackListed();
 	bool ShouldWeAutoload(IFilterGraph* pGraph);
 	void GetRidOfInternalScriptRenderer();
 

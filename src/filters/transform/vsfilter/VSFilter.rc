@@ -88,6 +88,23 @@ BEGIN
         BEGIN
             VALUE "Comments", "http://code.google.com/p/xy-vsfilter/"
             VALUE "CompanyName", "xy-VSFilter Team"
+#if defined XY_SUB_FILTER_DLL
+            VALUE "FileDescription", "XySubFilter for MadVR"
+            VALUE "FileVersion", XY_VSFILTER_VERSION_STR
+            VALUE "InternalName", "XySubFilter"
+            VALUE "LegalCopyright", "Copyright (C) 2001-2012 Yu Zhuohuang, Gabest et. al."
+            VALUE "OriginalFilename", "XySubFilter.dll"
+            VALUE "ProductName", "XySubFilter"
+            VALUE "ProductVersion", XY_VSFILTER_VERSION_STR
+#elif defined XY_SUB_FILTER_CONSUMER_DLL
+            VALUE "FileDescription", "XySubFilter Consumer"
+            VALUE "FileVersion", XY_VSFILTER_VERSION_STR
+            VALUE "InternalName", "XySubFilterConsumer"
+            VALUE "LegalCopyright", "Copyright (C) 2001-2012 Yu Zhuohuang, Gabest et. al."
+            VALUE "OriginalFilename", "XySubFilteConsumer.dll"
+            VALUE "ProductName", "XySubFilteConsumer"
+            VALUE "ProductVersion", XY_VSFILTER_VERSION_STR
+#else
             VALUE "FileDescription", "VobSub & TextSub filter for DirectShow/VirtualDub/Avisynth"
             VALUE "FileVersion", XY_VSFILTER_VERSION_STR
             VALUE "InternalName", "VSFilter"
@@ -95,6 +112,7 @@ BEGIN
             VALUE "OriginalFilename", "VSFilter.dll"
             VALUE "ProductName", "VSFilter"
             VALUE "ProductVersion", XY_VSFILTER_VERSION_STR
+#endif
         END
     END
     BLOCK "VarFileInfo"
@@ -172,7 +190,7 @@ BEGIN
     EDITTEXT        IDC_EDIT2,195,50,32,12,ES_RIGHT | ES_AUTOHSCROLL | ES_READONLY
     CONTROL         "Spin1",IDC_SPIN2,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,210,53,11,14
     GROUPBOX        "Text Settings",IDC_STATIC,7,74,111,35
-    PUSHBUTTON      "Arial",IDC_FONT,15,88,95,13
+    PUSHBUTTON      "Styles...",IDC_STYLES,15,88,95,13
     GROUPBOX        "VobSub Settings",IDC_STATIC,124,74,115,35
     CONTROL         "Only show &forced subtitles",IDC_ONLYSHOWFORCEDSUBS,
                     "Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,88,99,12
@@ -240,10 +258,6 @@ BEGIN
     EDITTEXT        IDC_EDIT9,72,82,39,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
     CONTROL         "",IDC_SPIN9,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,102,85,11,14
     LTEXT           "(subtitles : video)",IDC_STATIC,120,83,56,8
-    GROUPBOX        "Playback rate (experimental)",IDC_STATIC,7,108,233,34
-    CONTROL         "Force fps:",IDC_MODFPS,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,20,121,47,12
-    EDITTEXT        IDC_FPS,72,121,36,12,ES_CENTER | ES_AUTOHSCROLL
-    LTEXT           "- operability depends on other filters\n- may cause a/v desync",IDC_STATIC,114,118,120,18
 END
 
 IDD_DVSZOOMPAGE DIALOGEX 0, 0, 247, 188
@@ -272,7 +286,7 @@ BEGIN
     LTEXT           "Character set:",IDC_STATIC,5,2,48,8
 END
 
-IDD_STYLEDIALOG DIALOGEX 0, 0, 323, 219
+IDD_STYLE_PAGE DIALOGEX 0, 0, 323, 219
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "Style Editor"
 FONT 8, "MS Shell Dlg", 400, 0, 0x1
@@ -296,11 +310,9 @@ BEGIN
     CONTROL         "Outline",IDC_RADIO1,"Button",BS_AUTORADIOBUTTON | WS_GROUP,15,156,39,10
     CONTROL         "Opaque box",IDC_RADIO2,"Button",BS_AUTORADIOBUTTON,59,156,55,10
     LTEXT           "Border width",IDC_STATIC,17,174,42,8
-    EDITTEXT        IDC_EDIT1,71,171,34,14,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    CONTROL         "",IDC_SPIN1,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,102,170,11,14
+    EDITTEXT        IDC_EDIT1,71,171,34,14,ES_RIGHT | ES_AUTOHSCROLL
     LTEXT           "Shadow depth",IDC_STATIC,17,193,47,8
-    EDITTEXT        IDC_EDIT2,71,190,34,14,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
-    CONTROL         "",IDC_SPIN2,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,102,191,11,14
+    EDITTEXT        IDC_EDIT2,71,190,34,14,ES_RIGHT | ES_AUTOHSCROLL
     GROUPBOX        "Screen Alignment && Margins",IDC_STATIC,125,7,187,52
     CONTROL         "",IDC_RADIO3,"Button",BS_AUTORADIOBUTTON | WS_GROUP,134,42,11,8
     CONTROL         "",IDC_RADIO4,"Button",BS_AUTORADIOBUTTON,146,42,11,8
@@ -337,8 +349,6 @@ BEGIN
     CONTROL         "",IDC_COLORSHAD,"Static",SS_OWNERDRAW | SS_NOTIFY,175,136,16,14,WS_EX_DLGMODALFRAME
     CONTROL         "",IDC_SLIDER6,"msctls_trackbar32",TBS_BOTH | TBS_NOTICKS | WS_TABSTOP,198,137,103,13
     CONTROL         "Link alpha channels",IDC_CHECK1,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,213,154,76,10
-    PUSHBUTTON      "Cancel",IDCANCEL,211,197,50,14
-    DEFPUSHBUTTON   "OK",IDOK,265,197,50,14
     LTEXT           "100%",IDC_STATIC,289,76,20,8
     LTEXT           "0%",IDC_STATIC,200,76,12,8
 END
@@ -373,6 +383,83 @@ BEGIN
     CONTROL         "",IDC_SPIN_LAYOUT_SIZE_Y,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,183,110,11,14
 END
 
+IDD_XY_SUB_FILTER_MAINPAGE DIALOGEX 0, 0, 247, 244
+STYLE DS_SETFONT | WS_CHILD
+FONT 8, "MS Sans Serif", 400, 0, 0x1
+BEGIN
+    EDITTEXT        IDC_FILENAME,7,7,184,14,ES_AUTOHSCROLL | ES_READONLY
+    PUSHBUTTON      "&Open...",IDC_OPEN,196,7,43,14
+    CONTROL         "Ove&rride placement",IDC_OVERRIDEPLACEMENT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,34,100,12
+    LTEXT           "H:",IDC_STATIC,139,50,9,8
+    EDITTEXT        IDC_EDIT1,149,50,32,12,ES_RIGHT | ES_AUTOHSCROLL | ES_READONLY
+    CONTROL         "Spin1",IDC_SPIN1,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,171,53,11,14
+    LTEXT           "V:",IDC_STATIC,184,50,8,8
+    EDITTEXT        IDC_EDIT2,195,50,32,12,ES_RIGHT | ES_AUTOHSCROLL | ES_READONLY
+    CONTROL         "Spin1",IDC_SPIN2,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,210,53,11,14
+    GROUPBOX        "Text Settings",IDC_STATIC,7,74,111,57
+    PUSHBUTTON      "Styles...",IDC_STYLES,15,88,53,13
+    GROUPBOX        "VobSub Settings",IDC_STATIC,124,24,115,71
+    CONTROL         "Only show &forced subtitles",IDC_ONLYSHOWFORCEDSUBS,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,71,99,12
+    GROUPBOX        "General Settings",IDC_STATIC,7,24,111,47
+    COMBOBOX        IDC_LANGCOMBO,15,50,95,65,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CTEXT           "This space was intentionally left blank... :)",IDC_STATIC,8,189,232,31,SS_CENTERIMAGE | NOT WS_VISIBLE | WS_BORDER
+    LTEXT           "Language:",IDC_STATIC,15,37,35,8
+    GROUPBOX        "Systray Settings",IDC_STATIC,124,96,115,35
+    CONTROL         "&Hide tray icon",IDC_CHECKBOX_HideTrayIcon,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,132,110,99,12
+    GROUPBOX        "Loading",IDC_STATIC,7,134,233,35
+    COMBOBOX        IDC_LOADCOMBO,17,148,78,65,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "E&xternal",IDC_EXTLOAD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,103,148,39,12
+    CONTROL         "We&b",IDC_WEBLOAD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,149,148,28,12
+    CONTROL         "&Embedded",IDC_EMBLOAD,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,183,148,47,12
+    CONTROL         "Force Default",IDC_CHECKBOX_FORCE_DEFAULT_STYLE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,15,107,55,12
+END
+
+IDD_XY_SUB_FILTER_MOREPAGE DIALOGEX 0, 0, 247, 282
+STYLE DS_SETFONT | WS_CHILD | WS_SYSMENU
+FONT 8, "MS Sans Serif", 400, 0, 0x1
+BEGIN
+    EDITTEXT        IDC_EDITPathCache,64,18,31,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SPINPathCache,"msctls_updown32",UDS_SETBUDDYINT | UDS_AUTOBUDDY | UDS_ARROWKEYS,93,18,11,14
+    EDITTEXT        IDC_EDITScanlineCache,64,37,31,14,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SPINScanlineCache,"msctls_updown32",UDS_SETBUDDYINT | UDS_AUTOBUDDY | UDS_ARROWKEYS,94,37,11,14
+    EDITTEXT        IDC_EDITOverlayNoBlurCache,172,18,31,14,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SPINOverlayNoBlurCache,"msctls_updown32",UDS_SETBUDDYINT | UDS_AUTOBUDDY | UDS_ARROWKEYS,202,18,11,14
+    EDITTEXT        IDC_EDITOverlayCache,172,37,31,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SPINOverlayCache,"msctls_updown32",UDS_SETBUDDYINT | UDS_AUTOBUDDY | UDS_ARROWKEYS,202,37,11,14
+    COMBOBOX        IDC_COMBO_SUBPIXEL_POS,83,72,74,64,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    RTEXT           "Cache LV4",IDC_LABLE_PATH_CACHE,19,20,37,8
+    RTEXT           "Cache LV3",IDC_LABEL_SCAN_LINE_CACHE,19,39,37,8
+    RTEXT           "Cache LV1",IDC_LABLE_OVERLAY_CACHE,127,39,37,8
+    LTEXT           "Subpixel Position",IDC_STATIC,84,60,69,8
+    GROUPBOX        "Cache Options",IDC_STATIC,7,3,233,93
+    RTEXT           "Cache LV2",IDC_LABEL_OVERLAY_NO_BLUR,127,20,37,8
+    PUSHBUTTON      "caches info",IDC_CACHES_INFO_BTN,171,72,50,14
+    COMBOBOX        IDC_COMBO_LAYOUT_SIZE_OPT,16,109,114,64,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    GROUPBOX        "Renderer Layout Options",IDC_STATIC,7,97,233,45
+    LTEXT           "H:",IDC_STATIC,135,109,9,8
+    LTEXT           "V:",IDC_STATIC,185,109,8,8
+    EDITTEXT        IDC_EDIT_LAYOUT_SIZE_X,145,109,32,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SPIN_LAYOUT_SIZE_X,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,174,109,11,14
+    EDITTEXT        IDC_EDIT_LAYOUT_SIZE_Y,195,109,32,12,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SPIN_LAYOUT_SIZE_Y,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,227,109,11,14
+    GROUPBOX        "Subtitle Output",IDC_STATIC,7,146,233,46
+    COMBOBOX        IDC_COMBO_YUV_RANGE,16,172,36,16,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "YCbCr matrix",IDC_STATIC,17,159,57,11
+    COMBOBOX        IDC_COMBO_COLOR_SPACE,52,172,46,16,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "RGB Level",IDC_STATIC,110,159,44,11
+    COMBOBOX        IDC_COMBO_RGB_LEVEL,109,172,48,16,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    CONTROL         "&Hide subtitles",IDC_HIDE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,16,197,79,10
+    CONTROL         "&Auto-reload subtitle files after detecting modification",IDC_AUTORELOAD,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,16,212,224,10
+    LTEXT           " (reloading is disabled while showing the property pages)",IDC_STATIC,25,222,182,8
+    CONTROL         "Appl&y changes immediately",IDC_INSTANTUPDATE,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,16,236,104,10
+    CONTROL         "Render To Original Video Size",IDC_CHECKBOX_RENDER_TO_ORIGINAL_VIDEO_SIZE,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,16,127,132,10
+    EDITTEXT        IDC_EDIT_CACHE_SIZE,22,72,40,14,ES_AUTOHSCROLL,WS_EX_RIGHT
+    RTEXT           "Cache Size(MB)",IDC_LABLE_CACHE_SIZE,14,60,57,8
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -381,7 +468,11 @@ END
 
 // Icon with lowest ID value placed first to ensure application icon
 // remains consistent on all systems.
+#if defined XY_SUB_FILTER_DLL
+IDI_ICON1               ICON                    "res\\Icon_xy_sub_fillter.ico"
+#else
 IDI_ICON1               ICON                    "res\\Icon_147.ico"
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -489,7 +580,7 @@ BEGIN
         HORZGUIDE, 78
     END
 
-    IDD_STYLEDIALOG, DIALOG
+    IDD_STYLE_PAGE, DIALOG
     BEGIN
         LEFTMARGIN, 7
         RIGHTMARGIN, 316
@@ -504,10 +595,28 @@ BEGIN
     BEGIN
         LEFTMARGIN, 7
         RIGHTMARGIN, 240
-        VERTGUIDE, 20
+        BOTTOMMARGIN, 226
+    END
+
+    IDD_XY_SUB_FILTER_MAINPAGE, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 239
+        VERTGUIDE, 15
+        VERTGUIDE, 27
+        VERTGUIDE, 110
+        VERTGUIDE, 124
+        VERTGUIDE, 132
         TOPMARGIN, 7
-        BOTTOMMARGIN, 181
-        HORZGUIDE, 181
+        HORZGUIDE, 24
+        HORZGUIDE, 188
+    END
+
+    IDD_XY_SUB_FILTER_MOREPAGE, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 240
+        BOTTOMMARGIN, 208
     END
 END
 #endif    // APSTUDIO_INVOKED
@@ -536,10 +645,8 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_RG_LOADLEVEL        "LoadLevel"
     IDS_RG_INSTANTUPDATE    "InstantUpdate"
     IDS_RG_FLIPPICTURE      "FlipPicture"
-    IDS_RG_HIDE             "Hide"
     IDS_RG_NOYUY2COLORS     "NoYUY2Colors"
     IDS_RG_DOPREBUFFERING   "DoPreBuffering"
     IDS_RG_SHOWOSDSTATS     "ShowOSDStats"
@@ -547,7 +654,6 @@ BEGIN
     IDS_RG_RESX2            "ResX2Mode"
     IDS_RG_RESX2MINW        "ResX2MinWidth"
     IDS_RG_RESX2MINH        "ResX2MinHeight"
-    IDS_RTM_MEDIAFPS        "MediaFPS"
     IDS_RT_SHADOW           "Shadow"
     IDS_RT_OUTLINE          "Outline"
     IDS_RT_LOGFONT          "LOGFONT"
@@ -556,57 +662,45 @@ END
 
 STRINGTABLE
 BEGIN
-    IDS_RT_OVERRIDEPLACEMENT "OverridePlacement"
-    IDS_RT_XPERC            "XPerc"
-    IDS_RT_YPERC            "YPerc"
-    IDS_RV_BUFFER           "Buffer"
     IDS_RP_PATH             "Path%d"
     IDS_RL_LANG             "Lang%d"
     IDS_M_SHOWSUBTITLES     "Show Subtitles"
     IDS_M_HIDESUBTITLES     "Hide Subtitles"
     IDS_M_ORIGINALPICTURE   "Original Picture"
     IDS_M_FLIPPEDPICTURE    "Flipped Picture"
-    IDS_RV_POLYGONIZE       "Polygonize"
-    IDS_RG_EXTERNALLOAD     "ExtLoad"
-    IDS_RG_WEBLOAD          "WebLoad"
-    IDS_RG_EMBEDDEDLOAD     "EmbLoad"
-    IDS_RG_COLOR_SPACE     "Color Space"
     IDS_R_PERFORMANCE       "Performance"
 END
 
 STRINGTABLE
 BEGIN
     IDS_R_TIMING            "Timing"
-    IDS_RTM_SUBTITLEDELAY   "Subtitle Delay"
-    IDS_RTM_SUBTITLESPEEDMUL "Subtitle Speedmul"
     IDS_RT_ADVANCEDRENDERER "AdvancedRenderer"
-    IDS_RV_ONLYSHOWFORCEDSUBS "OnlyShowForcedSubs"
     IDS_ORGHEIGHT           "Original height"
     IDS_RG_VMRZOOMENABLED   "VMRZoomEnabled"
-    IDS_RTM_SUBTITLESPEEDDIV "Subtitle Speeddiv"
     IDS_RG_USE_UPSTREAM_PREFERRED_ORDER 
                             "Use Upstream filter's preferred order"
     IDS_EXTTO169            "Extend to 16:9"
     IDS_RG_FORCERGB         "ForceRGB"
     IDS_RG_ENABLEZPICON     "EnableZPIcon"
     IDS_RG_FLIPSUBTITLES    "FlipSubtitles"
-    IDS_RTM_MEDIAFPSENABLED "MediaFPSEnabled"
-    IDS_RG_DISABLERELOADER  "DisableReloader"
     IDS_EXTTO43             "Extend to 4:3"
 END
 
 STRINGTABLE
 BEGIN
+    IDD_DVSMAINPAGE         "&Main"
     IDD_DVSCOLORPAGE        "&Colors"
     IDD_DVSGENERALPAGE      "&General"
     IDD_DVSTIMINGPAGE       "&Timing"
     IDD_DVSMISCPAGE         "M&isc"
     IDS_R_GENERAL           "General"
+    IDD_DVSMOREPAGE         "M&ore"
 END
 
 STRINGTABLE
 BEGIN
-    IDD_DVSMAINPAGE         "&Main"
+    IDD_XY_SUB_FILTER_MAINPAGE "&Main"
+    IDD_XY_SUB_FILTER_MOREPAGE "M&ore"
 END
 
 STRINGTABLE
@@ -621,49 +715,109 @@ BEGIN
     IDS_ALWAYSLOAD          "Always load"
     IDS_EXTTO576            "Extend to 576 lines"
     IDS_EXTTO480            "Extend to 480 lines"
-    IDS_RT_AUTOPARCOMPENSATION "AutomaticPARCompensation"
     IDS_RT_PAR_DISABLED     "Disabled"
     IDS_RT_PAR_UPSCALE      "Upscale"
     IDS_RT_PAR_DOWNSCALE    "Downscale"
     IDS_RT_PAR_ACCURATE_SIZE "Accurate size"
-    IDS_RP_OVERLAY_CACHE_MAX_ITEM_NUM "Overlay_cache_max_item_num"
 END
 
 STRINGTABLE
 BEGIN
-    IDS_RT_STYLE            "Style2"
-END
-
-STRINGTABLE
-BEGIN
-    IDS_RP_SCAN_LINE_DATA_CACHE_MAX_ITEM_NUM 
-                            "Scan_line_data_cache_max_item_num"
-    IDS_RP_SUBPIXEL_POS_LEVEL "Subpixel Positioning Level"
-    IDS_RP_PATH_DATA_CACHE_MAX_ITEM_NUM "Path_cache_max_item_num"
-    IDS_RP_OVERLAY_NO_BLUR_CACHE_MAX_ITEM_NUM 
-                            "Overlay_no_blur_cache_max_item_num"
     IDS_RG_OUTPUT_COLORFORMATS "Output Color Format"
     IDS_RG_INPUT_COLORFORMATS "Input Color Format"
+END
+
+// XySubFilter Reg Options
+STRINGTABLE
+BEGIN
+    IDS_R_KNOWN_SOURCE_FILTER "KnownSourceFilter"
+    IDS_RK_TOTAL_NUMBER       "total_number"
+    IDS_RK_GUID               "giud%d"
+    IDS_RK_FRIENDLY_NAME      "friendly_name%d"
+    IDS_RP_MAX_CACHE_SIZE_MB  "max_cache_size_mb"
+#if defined XY_SUB_FILTER_DLL
+    IDS_RG_LOADLEVEL        "load_level"
+    IDS_RG_EXTERNALLOAD     "ext_load"
+    IDS_RG_WEBLOAD          "web_load"
+    IDS_RG_EMBEDDEDLOAD     "emb_load"
+    IDS_RG_DISABLERELOADER  "disable_reloader"
+    IDS_RG_HIDE             "hide"
+    IDS_RG_COLOR_SPACE      "color_space"
+    IDS_RG_BT601_WIDTH      "bt_601_width_for_guess"
+    IDS_RG_BT601_HEIGHT     "bt_601_height_for_guess"
+    IDS_RT_OVERRIDEPLACEMENT "override_placement"
+    IDS_RT_XPERC            "x_perc"
+    IDS_RT_YPERC            "y_perc"
+    IDS_RV_BUFFER           "buffer"
+    IDS_RV_ONLYSHOWFORCEDSUBS "only_show_forced_subs"
+    IDS_RV_POLYGONIZE       "polygonize"
+    IDS_RT_STYLE            "style2"
+    IDS_RTM_SUBTITLEDELAY   "subtitle_delay"
+    IDS_RTM_SUBTITLESPEEDMUL "subtitle_speed_mul"
+    IDS_RTM_SUBTITLESPEEDDIV "subtitle_Speed_div"
+    IDS_RG_HIDE_TRAY_ICON   "hide_tray_icon"
+    IDS_RP_BITMAP_MRU_CACHE_ITEM_NUM    "bitmap_mru_cache_item_num"
+    IDS_RP_CLIPPER_MRU_CACHE_ITEM_NUM   "clipper_mru_cache_item_num"
+    IDS_RP_TEXT_INFO_CACHE_ITEM_NUM     "text_info_cache_item_num"
+    IDS_RP_ASS_TAG_LIST_CACHE_ITEM_NUM  "ass_tag_list_cache_item_num"
+    IDS_RP_OVERLAY_CACHE_MAX_ITEM_NUM   "overlay_cache_max_item_num"
+    IDS_RP_SCAN_LINE_DATA_CACHE_MAX_ITEM_NUM "scan_line_data_cache_max_item_num"
+    IDS_RP_PATH_DATA_CACHE_MAX_ITEM_NUM "path_cache_max_item_num"
+    IDS_RP_OVERLAY_NO_BLUR_CACHE_MAX_ITEM_NUM "overlay_no_blur_cache_max_item_num"
+    IDS_RP_SUBPIXEL_POS_LEVEL "subpixel_positioning_level"
+    IDS_RG_LAYOUT_SIZE_OPT              "layout_size_opt"
+    IDS_RG_USER_SPECIFIED_LAYOUT_SIZE_X "user_specified_render_size_x"
+    IDS_RG_USER_SPECIFIED_LAYOUT_SIZE_Y "user_specified_render_size_y"
+    IDS_RG_LOAD_EXT_LIST                "load_ext_list"
+    IDS_RG_PGS_COLOR_TYPE               "pgs_color_type"
+    IDS_RP_MAX_BITMAP_COUNT             "max_bitmap_count"
+    IDS_RG_RGB_CORRECTION               "rgb_correction"
+    IDS_RG_RGB_OUTPUT_LEVEL             "rgb_output_level"
+    IDS_RG_RENDER_TO_ORIGINAL_VIDEO_SIZE "render_to_original_video_size"
+    IDS_RG_SUPPORTED_VERSION "supported_version"
+    IDS_RG_VERSION          "version"
+#else
+    IDS_RG_LOADLEVEL        "LoadLevel"
+    IDS_RG_EXTERNALLOAD     "ExtLoad"
+    IDS_RG_WEBLOAD          "WebLoad"
+    IDS_RG_EMBEDDEDLOAD     "EmbLoad"
+    IDS_RG_DISABLERELOADER  "DisableReloader"
+    IDS_RG_HIDE             "Hide"
+    IDS_RG_YUV_RANGE        "Yuv Range"
+    IDS_RG_COLOR_SPACE      "Color Space"
     IDS_RG_BT601_WIDTH      "bt.601 width(for guess)"
     IDS_RG_BT601_HEIGHT     "bt.601 height(for guess)"
-    IDS_RG_YUV_RANGE        "Yuv Range"
+    IDS_RT_OVERRIDEPLACEMENT "OverridePlacement"
+    IDS_RT_XPERC            "XPerc"
+    IDS_RT_YPERC            "YPerc"
+    IDS_RV_BUFFER           "Buffer"
+    IDS_RV_ONLYSHOWFORCEDSUBS "OnlyShowForcedSubs"
+    IDS_RV_POLYGONIZE       "Polygonize"
+    IDS_RT_STYLE            "Style2"
+    IDS_RTM_SUBTITLEDELAY   "Subtitle Delay"
+    IDS_RTM_SUBTITLESPEEDMUL "Subtitle Speedmul"
+    IDS_RTM_SUBTITLESPEEDDIV "Subtitle Speeddiv"
+    IDS_RT_AUTOPARCOMPENSATION "AutomaticPARCompensation"
     IDS_RG_HIDE_TRAY_ICON   "hide tray icon"
-    IDS_RG_SUPPORTED_VERSION "Supported Version"
-    IDS_RG_VERSION          "Version"
     IDS_RP_BITMAP_MRU_CACHE_ITEM_NUM    "BITMAP_MRU_CACHE_ITEM_NUM"
     IDS_RP_CLIPPER_MRU_CACHE_ITEM_NUM   "CLIPPER_MRU_CACHE_ITEM_NUM"
     IDS_RP_TEXT_INFO_CACHE_ITEM_NUM     "TEXT_INFO_CACHE_ITEM_NUM"
     IDS_RP_ASS_TAG_LIST_CACHE_ITEM_NUM  "ASS_TAG_LIST_CACHE_ITEM_NUM"
-    IDS_RG_LAYOUT_SIZE_OPT              "RENDER_SIZE_OPT"
+    IDS_RP_OVERLAY_CACHE_MAX_ITEM_NUM   "Overlay_cache_max_item_num"
+    IDS_RP_SCAN_LINE_DATA_CACHE_MAX_ITEM_NUM "Scan_line_data_cache_max_item_num"
+    IDS_RP_PATH_DATA_CACHE_MAX_ITEM_NUM "Path_cache_max_item_num"
+    IDS_RP_OVERLAY_NO_BLUR_CACHE_MAX_ITEM_NUM "Overlay_no_blur_cache_max_item_num"
+    IDS_RP_SUBPIXEL_POS_LEVEL "Subpixel Positioning Level"
+    IDS_RG_LAYOUT_SIZE_OPT              "layout_size_opt"
     IDS_RG_USER_SPECIFIED_LAYOUT_SIZE_X "USER_SPECIFIED_RENDER_SIZE_X"
     IDS_RG_USER_SPECIFIED_LAYOUT_SIZE_Y "USER_SPECIFIED_RENDER_SIZE_Y"
     IDS_RG_LOAD_EXT_LIST                "LOAD_EXT_LIST"
     IDS_RG_PGS_COLOR_TYPE               "PGS_COLOR_TYPE"
-END
-
-STRINGTABLE
-BEGIN
-    IDD_DVSMOREPAGE         "M&ore"
+    IDS_RP_MAX_BITMAP_COUNT             "MAX_BITMAP_COUNT"
+    IDS_RG_RGB_CORRECTION               "RGB_CORRECTION"
+    IDS_RG_SUPPORTED_VERSION "Supported Version"
+    IDS_RG_VERSION          "Version"
+#endif
 END
 
 #endif    // English (United States) resources

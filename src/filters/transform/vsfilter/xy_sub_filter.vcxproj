@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -19,10 +19,9 @@
     </ProjectConfiguration>
   </ItemGroup>
   <PropertyGroup Label="Globals">
-    <ProjectName>vsfilter</ProjectName>
-    <ProjectGuid>{530890F8-CBCB-4DAB-BEDF-9FB667D0AFEE}</ProjectGuid>
+    <ProjectName>xy_sub_filter</ProjectName>
+    <ProjectGuid>{9ED0FE7D-079D-4777-A40F-EF9189BDDD61}</ProjectGuid>
     <RootNamespace>$(ProjectName)</RootNamespace>
-    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <Import Project="..\..\..\configuration.props" />
@@ -35,21 +34,17 @@
   <PropertyGroup Condition="'$(Configuration)'=='Debug'" Label="Configuration">
     <UseDebugLibraries>true</UseDebugLibraries>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)'=='Release log'" Label="Configuration">
-    <UseDebugLibraries>false</UseDebugLibraries>
-    <WholeProgramOptimization>true</WholeProgramOptimization>
-  </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
-    <PlatformToolset>v141_xp</PlatformToolset>
+    <PlatformToolset>v141</PlatformToolset>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings">
@@ -59,28 +54,20 @@
     <Import Project="..\..\..\common.props" />
     <Import Project="VSFilter.props" />
   </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <TargetName>VSFilter</TargetName>
+    <TargetName>XySubFilter</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
-      <ModuleDefinitionFile>VSFilter.def</ModuleDefinitionFile>
+      <ModuleDefinitionFile>xy_sub_filter.def</ModuleDefinitionFile>
     </Link>
+    <ClCompile>
+      <PreprocessorDefinitions>XY_SUB_FILTER_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>_AFXDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XY_SUB_FILTER_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
-    <ClCompile>
-      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile>
-      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile>
-      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
-    <ClCompile>
-      <AdditionalOptions Condition="'$(Configuration)|$(Platform)'=='Release|x64'">/Zc:threadSafeInit- %(AdditionalOptions)</AdditionalOptions>
-    </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ResourceCompile Include="VSFilter.rc" />
@@ -95,34 +82,29 @@
     <ClCompile Include="..\..\..\thirdparty\mfc\winmdi.cpp">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </ClCompile>
-    <ClCompile Include="Copy.cpp">
-    </ClCompile>
-    <ClCompile Include="csriapi.cpp" />
+    <ClCompile Include="auto_load_helper.cpp" />
     <ClCompile Include="DirectVobSub.cpp" />
-    <ClCompile Include="DirectVobSubFilter.cpp" />
-    <ClCompile Include="DirectVobSubFilterDll.cpp" />
     <ClCompile Include="DirectVobSubPropPage.cpp" />
     <ClCompile Include="once_logger.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
-    <ClCompile Include="plugins.cpp" />
     <ClCompile Include="StdAfx.cpp">
       <PrecompiledHeader>Create</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="StyleEditorDialog.cpp" />
     <ClCompile Include="SubRenderOptionsImpl.cpp" />
+    <ClCompile Include="SubtitleInputPin2.cpp" />
     <ClCompile Include="Systray.cpp" />
-    <ClCompile Include="TextInputPin.cpp" />
-    <ClCompile Include="vfr.cpp" />
     <ClCompile Include="VSFilter.cpp" />
     <ClCompile Include="XyOptionsImpl.cpp" />
     <ClCompile Include="xy_logger.cpp" />
+    <ClCompile Include="xy_sub_filter.cpp" />
+    <ClCompile Include="xy_sub_filter_dll.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="auto_load_helper.h" />
     <ClInclude Include="CAutoTiming.h" />
-    <ClInclude Include="csri.h" />
     <ClInclude Include="DirectVobSub.h" />
-    <ClInclude Include="DirectVobSubFilter.h" />
     <ClInclude Include="DirectVobSubPropPage.h" />
     <ClInclude Include="IDirectVobSub.h" />
     <ClInclude Include="IDirectVobSubXy.h" />
@@ -130,19 +112,21 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="StdAfx.h" />
     <ClInclude Include="StyleEditorDialog.h" />
+    <ClInclude Include="SubRenderOptionsImpl.h" />
+    <ClInclude Include="SubtitleInputPin2.h" />
     <ClInclude Include="Systray.h" />
-    <ClInclude Include="TextInputPin.h" />
     <ClInclude Include="Timing_Logger.h" />
     <ClInclude Include="version.h" />
-    <ClInclude Include="vfr.h" />
     <ClInclude Include="VSFilter.h" />
     <ClInclude Include="XyOptionsImpl.h" />
     <ClInclude Include="XySubRenderIntf.h" />
     <ClInclude Include="xy_logger.h" />
+    <ClInclude Include="xy_sub_filter.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="res\Icon_147.ico" />
-    <None Include="VSFilter.def" />
+    <None Include="res\Icon_xy_sub_fillter.ico" />
+    <None Include="xy_sub_filter.def" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

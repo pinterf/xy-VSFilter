@@ -25,7 +25,6 @@
 #define IDS_RG_RESX2                    120
 #define IDS_RG_RESX2MINW                121
 #define IDS_RG_RESX2MINH                122
-#define IDS_RTM_MEDIAFPS                123
 #define IDS_RT_SHADOW                   124
 #define IDS_RT_OUTLINE                  125
 #define IDS_RT_LOGFONT                  126
@@ -60,7 +59,6 @@
 #define IDS_RG_FORCERGB                 154
 #define IDS_RG_ENABLEZPICON             155
 #define IDS_RG_FLIPSUBTITLES            156
-#define IDS_RTM_MEDIAFPSENABLED         157
 #define IDS_RG_DISABLERELOADER          158
 #define IDS_EXTTO43                     159
 #define IDS_CROPTO169                   160
@@ -100,6 +98,10 @@
 #define IDS_RG_USER_SPECIFIED_LAYOUT_SIZE_Y 194
 #define IDS_RG_LOAD_EXT_LIST                195
 #define IDS_RG_PGS_COLOR_TYPE               196
+#define IDS_RP_MAX_BITMAP_COUNT             197
+#define IDS_RG_RGB_CORRECTION               198
+#define IDS_RG_RGB_OUTPUT_LEVEL             199
+#define IDS_RG_RENDER_TO_ORIGINAL_VIDEO_SIZE 200
 #define IDC_FILENAME                    201
 #define IDD_DVSMAINPAGE                 201
 #define IDC_OPEN                        202
@@ -110,8 +112,10 @@
 #define IDC_CACHESUB                    206
 #define IDC_ONLYSHOWFORCEDSUBS          207
 #define IDC_POLYGONIZE                  208
+#define IDC_CHECKBOX_FORCE_DEFAULT_STYLE 208
 #define IDC_CHECKBOX_HideTrayIcon       209
-#define IDC_FONT                        212
+#define IDS_RG_FORCE_DEFAULT_STYLE      210
+#define IDC_STYLES                      212
 #define IDC_CONFIGDLG                   213
 #define IDC_SHADOW                      214
 #define IDI_ICON1                       214
@@ -129,6 +133,7 @@
 #define IDC_USEBT709                    224
 #define IDC_SHOWOSDSTATS                225
 #define IDC_OVERRIDEPLACEMENT           226
+#define IDS_R_KNOWN_SOURCE_FILTER       227
 #define IDC_EDIT1                       228
 #define IDC_EDIT2                       229
 #define IDC_EDIT7                       230
@@ -137,7 +142,6 @@
 #define IDC_SPIN1                       231
 #define IDC_SPIN2                       232
 #define IDC_SPIN7                       233
-#define IDC_MODFPS                      233
 #define IDC_EDIT8                       234
 #define IDC_ADVANCEDRENDERER            234
 #define IDC_SPIN8                       235
@@ -146,15 +150,20 @@
 #define IDC_EDIT3                       238
 #define IDC_SPIN3                       239
 #define IDC_EDIT4                       240
-#define IDD_STYLEDIALOG                 240
+#define IDD_STYLE_PAGE                  240
 #define IDC_SPIN4                       241
 #define IDD_DVSMOREPAGE                 241
 #define IDC_EDIT5                       242
+#define IDD_XY_SUB_FILTER_MAINPAGE      242
 #define IDC_SPIN5                       243
+#define IDD_XY_SUB_FILTER_MOREPAGE      243
 #define IDC_EDIT6                       244
 #define IDC_SPIN6                       245
 #define IDC_EDIT9                       246
 #define IDC_SPIN9                       247
+#define IDS_RK_GUID                     248
+#define IDS_RK_FRIENDLY_NAME            249
+#define IDS_RK_TOTAL_NUMBER             250
 #define IDC_PREFLIST                    257
 #define IDC_OUTPUT_FORMAT_LIST          257
 #define IDC_DYNCHGLIST                  259
@@ -168,7 +177,6 @@
 #define IDC_RESX2COMBO                  290
 #define IDC_VEREXTCOMBO                 298
 #define IDC_LOADCOMBO                   299
-#define IDC_FPS                         300
 #define IDC_SAVEFULLPATH                303
 #define IDC_INSTANTUPDATE               305
 #define IDC_PATHLIST                    307
@@ -194,16 +202,21 @@
 #define IDC_CACHES_INFO_BTN             327
 #define IDC_COMBO_LAYOUT_SIZE_OPT       328
 #define IDC_CHECK_FOLLOW_UPSTREAM       329
-#define IDC_COMBO_COLOR_SPACE          330
+#define IDC_COMBO_COLOR_SPACE           330
 #define IDC_VERSION                     331
 #define IDC_COMBO_YUV_RANGE             332
 #define IDC_EDIT_LAYOUT_SIZE_X          333
 #define IDC_SPIN_LAYOUT_SIZE_X          334
 #define IDC_EDIT_LAYOUT_SIZE_Y          335
 #define IDC_SPIN_LAYOUT_SIZE_Y          336
+#define IDC_COMBO_RGB_LEVEL             337
+#define IDS_RP_MAX_CACHE_SIZE_MB        338
+#define IDC_CHECKBOX_RENDER_TO_ORIGINAL_VIDEO_SIZE 341
+#define IDC_EDIT_CACHE_SIZE             342
 #define IDC_CACHE_OPTIONS               401
 #define IDC_LABLE_PATH_CACHE            402
 #define IDC_LABLE_OVERLAY_CACHE         403
+#define IDC_LABLE_CACHE_SIZE            404
 #define IDC_SLIDER2                     1020
 #define IDC_SLIDER3                     1021
 #define IDC_RADIO1                      1022
@@ -233,9 +246,9 @@
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        334
+#define _APS_NEXT_RESOURCE_VALUE        338
 #define _APS_NEXT_COMMAND_VALUE         32770
-#define _APS_NEXT_CONTROL_VALUE         337
-#define _APS_NEXT_SYMED_VALUE           195
+#define _APS_NEXT_CONTROL_VALUE         343
+#define _APS_NEXT_SYMED_VALUE           210
 #endif
 #endif

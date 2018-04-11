@@ -33,14 +33,31 @@ BEGIN_MESSAGE_MAP(CColorStatic, CStatic)
 END_MESSAGE_MAP()
 
 
-// CStyleEditorDialog dialog
+// CStyleEditorPPage Property Page
 
-IMPLEMENT_DYNAMIC(CStyleEditorDialog, CDialog)
-CStyleEditorDialog::CStyleEditorDialog(CString title, STSStyle* pstss, CWnd* pParent /*=NULL*/)
-	: CDialog(CStyleEditorDialog::IDD, pParent)
+IMPLEMENT_DYNAMIC(CStyleEditorPPage, CPropertyPage)
+
+CStyleEditorPPage::CStyleEditorPPage()
+    : CPropertyPage(CStyleEditorPPage::IDD)
+    , m_iCharset(0)
+    , m_spacing(0)
+    , m_angle(0)
+    , m_scalex(0)
+    , m_scaley(0)
+    , m_borderstyle(0)
+    , m_borderwidth(0)
+    , m_shadowdepth(0)
+    , m_screenalignment(0)
+    , m_margin(0,0,0,0)
+    , m_linkalphasliders(FALSE)
+{
+
+}
+
+CStyleEditorPPage::CStyleEditorPPage(CString title, const STSStyle* pstss)
+	: CPropertyPage(CStyleEditorPPage::IDD)
 	, m_title(title)
 	, m_stss(*pstss)
-	, m_pParent(pParent)
 	, m_iCharset(0)
 	, m_spacing(0)
 	, m_angle(0)
@@ -53,15 +70,25 @@ CStyleEditorDialog::CStyleEditorDialog(CString title, STSStyle* pstss, CWnd* pPa
 	, m_margin(0,0,0,0)
 	, m_linkalphasliders(FALSE)
 {
+    m_pPSP->pszTitle = m_title;
+    m_psp.dwFlags |= PSP_USETITLE;
 }
 
-CStyleEditorDialog::~CStyleEditorDialog()
+CStyleEditorPPage::~CStyleEditorPPage()
 {
 }
 
-void CStyleEditorDialog::DoDataExchange(CDataExchange* pDX)
+void CStyleEditorPPage::init( CString title, const STSStyle* pstss )
 {
-	CDialog::DoDataExchange(pDX);
+    m_title = title;
+    m_stss = *pstss;
+    m_pPSP->pszTitle = m_title;
+    m_psp.dwFlags |= PSP_USETITLE;
+}
+
+void CStyleEditorPPage::DoDataExchange(CDataExchange* pDX)
+{
+	CPropertyPage::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_BUTTON1, m_font);
 	DDX_CBIndex(pDX, IDC_COMBO1, m_iCharset);
 	DDX_Control(pDX, IDC_COMBO1, m_charset);
@@ -74,10 +101,8 @@ void CStyleEditorDialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Text(pDX, IDC_EDIT6, m_scaley);
 	DDX_Control(pDX, IDC_SPIN5, m_scaleyspin);
 	DDX_Radio(pDX, IDC_RADIO1, m_borderstyle);
-	DDX_Text(pDX, IDC_EDIT1, m_borderwidth);
-	DDX_Control(pDX, IDC_SPIN1, m_borderwidthspin);
-	DDX_Text(pDX, IDC_EDIT2, m_shadowdepth);
-	DDX_Control(pDX, IDC_SPIN2, m_shadowdepthspin);
+	DDX_Text(pDX, IDC_EDIT1, m_borderwidth_str);
+	DDX_Text(pDX, IDC_EDIT2, m_shadowdepth_str);
 	DDX_Radio(pDX, IDC_RADIO3, m_screenalignment);
 	DDX_Text(pDX, IDC_EDIT7, m_margin.left);
 	DDX_Control(pDX, IDC_SPIN6, m_marginleftspin);
@@ -102,7 +127,7 @@ void CStyleEditorDialog::DoDataExchange(CDataExchange* pDX)
 	DDX_Check(pDX, IDC_CHECK1, m_linkalphasliders);
 }
 
-void CStyleEditorDialog::UpdateControlData(bool fSave)
+void CStyleEditorPPage::UpdateControlData(bool fSave)
 {
 	if(fSave)
 	{
@@ -115,8 +140,14 @@ void CStyleEditorDialog::UpdateControlData(bool fSave)
 		m_stss.fontScaleY = m_scaley;
 
 		m_stss.borderStyle = m_borderstyle;
-		m_stss.outlineWidthX = m_stss.outlineWidthY = m_borderwidth;
-		m_stss.shadowDepthX = m_stss.shadowDepthY = m_shadowdepth;
+        if (_stscanf_s(m_borderwidth_str, _T("%lf"), &m_borderwidth) == 1)
+        {
+            m_stss.outlineWidthX = m_stss.outlineWidthY = m_borderwidth;
+        }
+        if (_stscanf_s(m_shadowdepth_str, _T("%lf"), &m_shadowdepth) == 1)
+        {
+            m_stss.shadowDepthX = m_stss.shadowDepthY = m_shadowdepth;
+        }
 
 		m_stss.scrAlignment = m_screenalignment+1;
 		m_stss.marginRect = m_margin;
@@ -126,15 +157,20 @@ void CStyleEditorDialog::UpdateControlData(bool fSave)
 	else
 	{
 		m_font.SetWindowText(m_stss.fontName);
-		m_iCharset = -1;
-		for(int i = 0; i < CharSetLen; i++)
-		{
-			CString str;
-			str.Format(_T("%s (%d)"), CharSetNames[i], CharSetList[i]);
-			m_charset.AddString(str);
-			m_charset.SetItemData(i, CharSetList[i]);
-			if(m_stss.charSet == CharSetList[i]) m_iCharset = i;
-		}
+
+        if (m_charset.GetCount()==0)
+        {
+            m_iCharset = -1;
+            for(int i = 0; i < CharSetLen; i++)
+            {
+                CString str;
+                str.Format(_T("%s (%d)"), CharSetNames[i], CharSetList[i]);
+                m_charset.AddString(str);
+                m_charset.SetItemData(i, CharSetList[i]);
+                if(m_stss.charSet == CharSetList[i]) m_iCharset = i;
+            }
+        }
+
 		// TODO: allow floats in these edit boxes
 		m_spacing = m_stss.fontSpacing;
 		m_spacingspin.SetRange32(-10000, 10000);
@@ -148,9 +184,9 @@ void CStyleEditorDialog::UpdateControlData(bool fSave)
 
 		m_borderstyle = m_stss.borderStyle;
 		m_borderwidth = min(m_stss.outlineWidthX, m_stss.outlineWidthY);
- 		m_borderwidthspin.SetRange32(0, 10000);
+        m_borderwidth_str.Format(_T("%0.4f"),m_borderwidth);
 		m_shadowdepth = min(m_stss.shadowDepthX, m_stss.shadowDepthY);
-		m_shadowdepthspin.SetRange32(0, 10000);
+        m_shadowdepth_str.Format(_T("%0.4f"),m_shadowdepth);
 
 		m_screenalignment = m_stss.scrAlignment-1;
 		m_margin = m_stss.marginRect.get();
@@ -172,7 +208,7 @@ void CStyleEditorDialog::UpdateControlData(bool fSave)
 	}
 }
 
-void CStyleEditorDialog::AskColor(int i)
+void CStyleEditorPPage::AskColor(int i)
 {
 	CColorDialog dlg(m_stss.colors[i]);
 	dlg.m_cc.Flags |= CC_FULLOPEN;
@@ -183,7 +219,7 @@ void CStyleEditorDialog::AskColor(int i)
 	}
 }
 
-BEGIN_MESSAGE_MAP(CStyleEditorDialog, CDialog)
+BEGIN_MESSAGE_MAP(CStyleEditorPPage, CPropertyPage)
 	ON_BN_CLICKED(IDC_BUTTON1, OnBnClickedButton1)
 	ON_STN_CLICKED(IDC_COLORPRI, OnStnClickedColorpri)
 	ON_STN_CLICKED(IDC_COLORSEC, OnStnClickedColorsec)
@@ -196,26 +232,23 @@ END_MESSAGE_MAP()
 
 // CStyleEditorDialog message handlers
 
-BOOL CStyleEditorDialog::OnInitDialog()
+BOOL CStyleEditorPPage::OnSetActive()
 {
-	CDialog::OnInitDialog();
-
-	SetWindowText(_T("Style Editor - \"") + m_title + _T("\""));
+	//SetWindowText(_T("Style Editor - \"") + m_title + _T("\""));
 
 	UpdateControlData(false);
 
-	return TRUE;  // return TRUE unless you set the focus to a control
-	// EXCEPTION: OCX Property Pages should return FALSE
+    return __super::OnSetActive();
 }
 
-void CStyleEditorDialog::OnOK()
+void CStyleEditorPPage::OnOK()
 {
 	UpdateControlData(true);
 
-	CDialog::OnOK();
+	CPropertyPage::OnOK();
 }
 
-void CStyleEditorDialog::OnBnClickedButton1()
+void CStyleEditorPPage::OnBnClickedButton1()
 {
 	LOGFONT lf;
 	lf <<= m_stss;
@@ -240,27 +273,27 @@ void CStyleEditorDialog::OnBnClickedButton1()
 	}
 }
 
-void CStyleEditorDialog::OnStnClickedColorpri()
+void CStyleEditorPPage::OnStnClickedColorpri()
 {
 	AskColor(0);
 }
 
-void CStyleEditorDialog::OnStnClickedColorsec()
+void CStyleEditorPPage::OnStnClickedColorsec()
 {
 	AskColor(1);
 }
 
-void CStyleEditorDialog::OnStnClickedColoroutl()
+void CStyleEditorPPage::OnStnClickedColoroutl()
 {
 	AskColor(2);
 }
 
-void CStyleEditorDialog::OnStnClickedColorshad()
+void CStyleEditorPPage::OnStnClickedColorshad()
 {
 	AskColor(3);
 }
 
-void CStyleEditorDialog::OnBnClickedCheck1()
+void CStyleEditorPPage::OnBnClickedCheck1()
 {
 	UpdateData();
 
@@ -270,7 +303,7 @@ void CStyleEditorDialog::OnBnClickedCheck1()
 	for(int i = 0; i < 4; i++) m_alphasliders[i].SetPos(avg);
 }
 
-void CStyleEditorDialog::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
+void CStyleEditorPPage::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollBar)
 {
 	if(m_linkalphasliders && pScrollBar)
 	{
@@ -278,5 +311,5 @@ void CStyleEditorDialog::OnHScroll(UINT nSBCode, UINT nPos, CScrollBar* pScrollB
 		for(int i = 0; i < 4; i++) m_alphasliders[i].SetPos(pos);
 	}
 
-	CDialog::OnHScroll(nSBCode, nPos, pScrollBar);
+	CPropertyPage::OnHScroll(nSBCode, nPos, pScrollBar);
 }

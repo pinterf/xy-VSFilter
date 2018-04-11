@@ -27,7 +27,14 @@
 
 #include <initguid.h>
 #include "..\..\..\..\include\moreuuids.h"
-#include "xy_logger.h"
+#include "xy_sub_filter.h"
+
+
+#if ENABLE_XY_LOG_REG_CONFIG
+#  define TRACE_REG_CONFIG(msg) XY_LOG_TRACE(msg)
+#else
+#  define TRACE_REG_CONFIG(msg)
+#endif
 
 /////////////////////////////////////////////////////////////////////////////
 // CVSFilterApp 
@@ -37,12 +44,19 @@ END_MESSAGE_MAP()
 
 CVSFilterApp::CVSFilterApp()
 {
-#ifdef __DO_LOG
-    LPTSTR  strDLLPath = new TCHAR[_MAX_PATH];
+    _CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
+#if ENABLE_XY_LOG
+    LPTSTR  strDLLPath = DEBUG_NEW TCHAR[_MAX_PATH];
     ::GetModuleFileName( reinterpret_cast<HINSTANCE>(&__ImageBase), strDLLPath, _MAX_PATH);
     CString dllPath = strDLLPath;
     dllPath += ".properties";
     xy_logger::doConfigure( dllPath.GetString() );
+    delete [] strDLLPath;
+#endif
+
+#if (defined XY_SUB_FILTER_DLL)
+    free((void*)m_pszProfileName);
+    m_pszProfileName = _tcsdup(_T("XySubFilter"));
 #endif
 }
 
@@ -54,6 +68,10 @@ BOOL CVSFilterApp::InitInstance()
 		return FALSE;
 
 	SetRegistryKey(_T("Gabest"));
+#if (defined XY_SUB_FILTER_DLL)
+    free((void*)m_pszProfileName);
+    m_pszProfileName = _tcsdup(_T("XySubFilter"));//restore m_pszProfileName overwrite by SetRegistryKey
+#endif
 
 	DllEntryPoint(AfxGetInstanceHandle(), DLL_PROCESS_ATTACH, 0); // "DllMain" of the dshow baseclasses
 
@@ -76,117 +94,26 @@ int CVSFilterApp::ExitInstance()
 
 HINSTANCE CVSFilterApp::LoadAppLangResourceDLL()
 {
-	CString fn;
-	fn.ReleaseBufferSetLength(::GetModuleFileName(m_hInstance, fn.GetBuffer(MAX_PATH), MAX_PATH));
-	fn = fn.Mid(fn.ReverseFind('\\')+1);
-	fn = fn.Left(fn.ReverseFind('.')+1);
-	fn = fn + _T("lang");
-	return ::LoadLibrary(fn);
+    CString fn;
+    fn.ReleaseBufferSetLength(::GetModuleFileName(m_hInstance, fn.GetBuffer(MAX_PATH), MAX_PATH));
+    fn = fn.Mid(fn.ReverseFind('\\')+1);
+    fn = fn.Left(fn.ReverseFind('.')+1);
+    fn = fn + _T("lang");
+    return ::LoadLibrary(fn);
+}
+
+UINT CVSFilterApp::GetProfileInt( LPCTSTR lpszSection, LPCTSTR lpszEntry, int nDefault )
+{
+    UINT rv = __super::GetProfileInt(lpszSection, lpszEntry, nDefault);
+    TRACE_REG_CONFIG(lpszSection<<" "<<lpszEntry<<" "<<rv);
+    return rv;
+}
+
+CString CVSFilterApp::GetProfileString( LPCTSTR lpszSection, LPCTSTR lpszEntry, LPCTSTR lpszDefault /*= NULL*/ )
+{
+    CString rv = __super::GetProfileString(lpszSection, lpszEntry, lpszDefault);
+    TRACE_REG_CONFIG(lpszSection<<" "<<lpszEntry<<" '"<<rv.GetString()<<"'");
+    return rv;
 }
 
 CVSFilterApp theApp;
-
-//////////////////////////////////////////////////////////////////////////
-
-const AMOVIESETUP_MEDIATYPE sudPinTypesIn[] =
-{
-	{&MEDIATYPE_NULL, &MEDIASUBTYPE_NULL},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_YUY2},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_YV12},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_I420},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_IYUV},
-    {&MEDIATYPE_Video, &MEDIASUBTYPE_P010},
-    {&MEDIATYPE_Video, &MEDIASUBTYPE_P016},
-    {&MEDIATYPE_Video, &MEDIASUBTYPE_NV12},
-    {&MEDIATYPE_Video, &MEDIASUBTYPE_NV21},
-    {&MEDIATYPE_Video, &MEDIASUBTYPE_AYUV},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_RGB32},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_RGB565},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_RGB555},
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_RGB24},
-};
-
-const AMOVIESETUP_MEDIATYPE sudPinTypesIn2[] =
-{
-	{&MEDIATYPE_Text, &MEDIASUBTYPE_None},
-};
-
-const AMOVIESETUP_MEDIATYPE sudPinTypesOut[] =
-{
-	{&MEDIATYPE_Video, &MEDIASUBTYPE_None},
-};
-
-const AMOVIESETUP_PIN sudpPins[] =
-{
-    {L"Input", FALSE, FALSE, FALSE, FALSE, &CLSID_NULL, NULL, countof(sudPinTypesIn), sudPinTypesIn},
-    {L"Output", FALSE, TRUE, FALSE, FALSE, &CLSID_NULL, NULL, countof(sudPinTypesOut), sudPinTypesOut},
-    {L"Input2", TRUE, FALSE, FALSE, TRUE, &CLSID_NULL, NULL, countof(sudPinTypesIn2), sudPinTypesIn2}
-};
-
-/*const*/ AMOVIESETUP_FILTER sudFilter[] =
-{
-	{&__uuidof(CDirectVobSubFilter), L"DirectVobSub", MERIT_DO_NOT_USE, countof(sudpPins), sudpPins},
-	{&__uuidof(CDirectVobSubFilter2), L"DirectVobSub (auto-loading version)", MERIT_PREFERRED+2, countof(sudpPins), sudpPins},
-};
-
-CFactoryTemplate g_Templates[] =
-{
-	{sudFilter[0].strName, sudFilter[0].clsID, CreateInstance<CDirectVobSubFilter>, NULL, &sudFilter[0]},
-    {sudFilter[1].strName, sudFilter[1].clsID, CreateInstance<CDirectVobSubFilter2>, NULL, &sudFilter[1]},
-    {L"DVSMainPPage", &__uuidof(CDVSMainPPage), CreateInstance<CDVSMainPPage>},
-    {L"DVSGeneralPPage", &__uuidof(CDVSGeneralPPage), CreateInstance<CDVSGeneralPPage>},
-    {L"DVSMiscPPage", &__uuidof(CDVSMiscPPage), CreateInstance<CDVSMiscPPage>},
-    {L"DVSMorePPage", &__uuidof(CDVSMorePPage), CreateInstance<CDVSMorePPage>},
-    {L"DVSTimingPPage", &__uuidof(CDVSTimingPPage), CreateInstance<CDVSTimingPPage>},
-	{L"DVSZoomPPage", &__uuidof(CDVSZoomPPage), CreateInstance<CDVSZoomPPage>},
-    {L"DVSColorPPage", &__uuidof(CDVSColorPPage), CreateInstance<CDVSColorPPage>},
-    {L"DVSPathsPPage", &__uuidof(CDVSPathsPPage), CreateInstance<CDVSPathsPPage>},
-	{L"DVSAboutPPage", &__uuidof(CDVSAboutPPage), CreateInstance<CDVSAboutPPage>},
-};
-
-int g_cTemplates = countof(g_Templates);
-
-//////////////////////////////
-/*removeme*/
-extern void JajDeGonoszVagyok();
-
-STDAPI DllRegisterServer()
-{
-	AFX_MANAGE_STATE(AfxGetStaticModuleState());
-
-	if(theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SEENDIVXWARNING), 0) != 1)
-		theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SEENDIVXWARNING), 0);
-
-	if(theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_VMRZOOMENABLED), -1) == -1)
-		theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_VMRZOOMENABLED), 0);
-
-	if(theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_ENABLEZPICON), -1) == -1)
-		theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_ENABLEZPICON), 0);
-
-	/*removeme*/
-	JajDeGonoszVagyok();
-
-	return AMovieDllRegisterServer2(TRUE);
-}
-
-STDAPI DllUnregisterServer()
-{
-//	DVS_WriteProfileInt2(IDS_R_GENERAL, IDS_RG_SEENDIVXWARNING, 0);
-
-	return AMovieDllRegisterServer2(FALSE);
-}
-
-void CALLBACK DirectVobSub(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
-{
-	if(FAILED(::CoInitialize(0))) return;
-
-    CComPtr<IBaseFilter> pFilter;
-	CComQIPtr<ISpecifyPropertyPages> pSpecify;
-
-	if(SUCCEEDED(pFilter.CoCreateInstance(__uuidof(CDirectVobSubFilter))) && (pSpecify = pFilter))
-	{
-		ShowPPage(pFilter, hwnd);
-	}
-
-	::CoUninitialize();
-}

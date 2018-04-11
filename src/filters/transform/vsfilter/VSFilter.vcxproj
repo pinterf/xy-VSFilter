@@ -130,6 +130,7 @@
     <ClInclude Include="resource.h" />
     <ClInclude Include="StdAfx.h" />
     <ClInclude Include="StyleEditorDialog.h" />
+    <ClInclude Include="SubRenderOptionsImpl.h" />
     <ClInclude Include="Systray.h" />
     <ClInclude Include="TextInputPin.h" />
     <ClInclude Include="Timing_Logger.h" />

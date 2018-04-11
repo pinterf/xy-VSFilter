@@ -139,10 +139,10 @@
     <ClInclude Include="XySubRenderIntf.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="SubRenderOptionsImpl.h">
+    <ClInclude Include="XyOptionsImpl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="XyOptionsImpl.h">
+    <ClInclude Include="SubRenderOptionsImpl.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

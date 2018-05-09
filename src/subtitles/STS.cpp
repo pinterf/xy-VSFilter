@@ -553,7 +553,12 @@ static bool OpenSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
 
             bool fFoundEmpty = false;
 
-            while (file->ReadString(tmp)) {
+            while (true) {
+                // PF: don't ignore the very last line when there is no LF after that
+                bool fEOF = !file->ReadString(tmp);
+                if (fEOF && tmp.IsEmpty())
+                  break;
+
                 FastTrim(tmp);
                 if (tmp.IsEmpty()) {
                     fFoundEmpty = true;
@@ -567,6 +572,9 @@ static bool OpenSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
                 }
 
                 str += tmp + '\n';
+
+                if (fEOF)
+                  break;
             }
 
             ret.Add(

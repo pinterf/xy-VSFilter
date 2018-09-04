@@ -1,4 +1,4 @@
-# xy-VSFilter v3.1.0.800 (20180411)
+# xy-VSFilter v3.1.0.801 (20180904)
 https://github.com/pinterf/xy-VSFilter/
 
 A modification by pinterf: 
@@ -24,6 +24,10 @@ Info:
 
 
 Change log:
+- v3.1.0.801 (20180904)
+-- fix random crash in x64 build (address truncated to 32 bits, Rasterizer::Draw and Rasterizer::FillSolidRect were affected)
+-- XySubFilter.DLL now compiled with v141_xp toolset instead of v141 (like VSFilter.DLL)
+
 - v3.1.0.800 (20180411)
 -- apply XySubFilter-3.1.0.746<->xy-VSFilter 3.0.0.306 file differences
 -- get it work again under VS2017

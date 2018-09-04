@@ -6,6 +6,7 @@ A modification by pinterf:
   pfmod:VS2017 + VSFilter-TextSub 10/16bit Avisynth extension => 
   apply XySubfilter-3.1.0.746<->3.0.0.306 file differences =>
   make VSFilter work again as an Avisynth plugin
+  (3.1.0.801): Fix x64 crash, apply other patches from https://github.com/Cyberbeing/xy-VSFilter/tree/xy_sub_filter_rc4
 - Forum: https://forum.doom9.org/showthread.php?t=168282
 - Other useful link: https://avisynth.org.ru/docs/english/externalfilters/vsfilter.htm
 - All credits to the previous authors.
@@ -27,6 +28,11 @@ Change log:
 - v3.1.0.801 (20180904)
 -- fix random crash in x64 build (address truncated to 32 bits, Rasterizer::Draw and Rasterizer::FillSolidRect were affected)
 -- XySubFilter.DLL now compiled with v141_xp toolset instead of v141 (like VSFilter.DLL)
+-- From upstream (madshi, Cyberbeing)
+   Fix a possible infinite loop in the Real Text subtitle parser on 64-bit
+   Fix external SRT subtitles with italic tag not being flagged as repositionable
+   Disable repositioning for SSA/ASS subtitles with default position level
+   Add setting to allow repositioning of SSA/ASS dialog
 
 - v3.1.0.800 (20180411)
 -- apply XySubFilter-3.1.0.746<->xy-VSFilter 3.0.0.306 file differences

@@ -1,4 +1,4 @@
-# xy-VSFilter v3.1.0.801 (20180904)
+# xy-VSFilter v3.1.0.802 (20181030)
 https://github.com/pinterf/xy-VSFilter/
 
 A modification by pinterf: 
@@ -23,8 +23,19 @@ Info:
   After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else 
   XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed."
 
-
 Change log:
+- v3.1.0.802 (20181030)
+   Note: Cyberbeing have released a patch for their original xy-VSFilter, their version stepped to v3.1.0.752.
+   Since I thought the project to be full-dead and my version numbering continued - after a range skip - the original numbering, 
+   I may need to change my versioning scheme to avoid confusion?
+-- Fix TextSub crash that could occur in rare circumstances (shssoichiro)
+-- Fix for SSA/ASS repositioning becoming permanently disabled after typesetting was displayed
+   (madshi -> Cyberbeing v3.1.0.752 7th October 2018)
+   Apply https://github.com/Cyberbeing/xy-VSFilter/commit/cf8f5b27de77fe649341bfab0fdfd498e1ad2fa6
+-- Add BT.2020 Support 
+   (madshi -> Cyberbeing v3.1.0.751 27th September 2018)
+   Apply https://github.com/Cyberbeing/xy-VSFilter/commit/4804cf2cc1c6cb78c3d35566454c0ca682e82085 (xy_sub_filter_rc4)
+
 - v3.1.0.801 (20180904)
 -- fix random crash in x64 build (address truncated to 32 bits, Rasterizer::Draw and Rasterizer::FillSolidRect were affected)
 -- XySubFilter.DLL now compiled with v141_xp toolset instead of v141 (like VSFilter.DLL)

@@ -11,7 +11,7 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <YASM>
-      <CommandLineTemplate>yasm -X vc [Platform] [Debug] [Defines] [IncludePaths] -o "$(IntDir)%(Filename).obj" "%(FullPath)"</CommandLineTemplate>
+      <CommandLineTemplate>"c:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\"yasm -X vc [Platform] [Debug] [Defines] [IncludePaths] -o "$(IntDir)%(Filename).obj" "%(FullPath)"</CommandLineTemplate>
       <Outputs>$(IntDir)%(Filename).obj</Outputs>
       <ExecutionDescription>YASM: Assembling %(Filename)%(Extension)</ExecutionDescription>
       <Debug>False</Debug>

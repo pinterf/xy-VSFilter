@@ -1169,6 +1169,9 @@ public:
                     vi.pixel_type == VideoInfo::CS_YUV420P16 ? MSP_P016 : // P.F. 180224 16 bit support
                     -1;
 
+                if (dst.type == -1)
+                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YUV420P10 or YUV420P16.");
+
                 bool semi_packed_p10 = (vi.pixel_type == VideoInfo::CS_YUV420P10) || (vi.pixel_type == VideoInfo::CS_YUV422P10);
                 bool semi_packed_p16 = (vi.pixel_type == VideoInfo::CS_YUV420P16) || (vi.pixel_type == VideoInfo::CS_YUV422P16);
                 // P010/P016 format:

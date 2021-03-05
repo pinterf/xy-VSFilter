@@ -1130,6 +1130,110 @@ public:
                 }
             }
 
+            void convYUY2to422_c(const uint8_t* src, uint8_t* py, uint8_t* pu, uint8_t* pv, int pitch1, int pitch2Y, int pitch2UV, int width, int height)
+            {
+                width >>= 1;
+                for (int y = 0; y < height; ++y)
+                {
+                    for (int x = 0; x < width; ++x)
+                    {
+                        py[x << 1] = src[x << 2];
+                        pu[x] = src[(x << 2) + 1];
+                        py[(x << 1) + 1] = src[(x << 2) + 2];
+                        pv[x] = src[(x << 2) + 3];
+                    }
+                    py += pitch2Y;
+                    pu += pitch2UV;
+                    pv += pitch2UV;
+                    src += pitch1;
+                }
+            }
+
+            void convYUY2to422_SSE2(const uint8_t* src, uint8_t* py, uint8_t* pu,
+                uint8_t* pv, int pitch1, int pitch2Y, int pitch2UV, int width, int height)
+            {
+                width >>= 1;
+                __m128i Ymask = _mm_set1_epi16(0x00FF);
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x += 4) {
+                        __m128i fullsrc = _mm_load_si128(reinterpret_cast<const __m128i*>(src + x * 4)); // VYUYVYUYVYUYVYUY
+                        __m128i yy = _mm_and_si128(fullsrc, Ymask); // 0Y0Y0Y0Y0Y0Y0Y0Y
+                        __m128i uvuv = _mm_srli_epi16(fullsrc, 8); // 0V0U0V0U0V0U0V0U
+                        yy = _mm_packus_epi16(yy, yy); // xxxxxxxxYYYYYYYY
+                        uvuv = _mm_packus_epi16(uvuv, uvuv); // xxxxxxxxVUVUVUVU
+                        __m128i uu = _mm_and_si128(uvuv, Ymask); // xxxxxxxx0U0U0U0U
+                        __m128i vv = _mm_srli_epi16(uvuv, 8); // xxxxxxxx0V0V0V0V
+                        uu = _mm_packus_epi16(uu, uu); // xxxxxxxxxxxxUUUU
+                        vv = _mm_packus_epi16(vv, vv); // xxxxxxxxxxxxVVVV
+                        _mm_storel_epi64(reinterpret_cast<__m128i*>(py + x * 2), yy);
+                        *(uint32_t*)(pu + x) = _mm_cvtsi128_si32(uu);
+                        *(uint32_t*)(pv + x) = _mm_cvtsi128_si32(vv);
+                    }
+                    src += pitch1;
+                    py += pitch2Y;
+                    pu += pitch2UV;
+                    pv += pitch2UV;
+                }
+            }
+
+            void conv422toYUY2_c(const uint8_t* py, const uint8_t* pu, const uint8_t* pv,
+                uint8_t* dst, int pitch1Y, int pitch1UV, int pitch2, int width, int height)
+            {
+                width >>= 1;
+                for (int y = 0; y < height; ++y)
+                {
+                    for (int x = 0; x < width; ++x)
+                    {
+                        dst[x << 2] = py[x << 1];
+                        dst[(x << 2) + 1] = pu[x];
+                        dst[(x << 2) + 2] = py[(x << 1) + 1];
+                        dst[(x << 2) + 3] = pv[x];
+                    }
+                    py += pitch1Y;
+                    pu += pitch1UV;
+                    pv += pitch1UV;
+                    dst += pitch2;
+                }
+            }
+
+            void conv422toYUY2_SSE2(const uint8_t* py, const uint8_t* pu, const uint8_t* pv,
+                uint8_t* dst, int pitch1Y, int pitch1UV, int pitch2, int width, int height)
+            {
+                width >>= 1;
+                for (int y = 0; y < height; y++) {
+                    for (int x = 0; x < width; x += 4) {
+                        __m128i yy = _mm_loadl_epi64(reinterpret_cast<const __m128i*>(py + x * 2)); // YYYYYYYY
+                        __m128i uu = _mm_castps_si128(_mm_load_ss(reinterpret_cast<const float*>(pu + x))); // 000000000000UUUU
+                        __m128i vv = _mm_castps_si128(_mm_load_ss(reinterpret_cast<const float*>(pv + x))); // 000000000000VVVV
+                        __m128i uvuv = _mm_unpacklo_epi8(uu, vv); // 00000000VUVUVUVU
+                        __m128i yuyv = _mm_unpacklo_epi8(yy, uvuv); // VYUYVYUYVYUYVYUY
+                        _mm_store_si128(reinterpret_cast<__m128i*>(dst + x * 4), yuyv);
+                    }
+                    dst += pitch2;
+                    py += pitch1Y;
+                    pu += pitch1UV;
+                    pv += pitch1UV;
+                }
+            }
+
+            void convYUY2to422(const uint8_t* src, uint8_t* py, uint8_t* pu,
+                uint8_t* pv, int pitch1, int pitch2Y, int pitch2UV, int width, int height, bool useSSE2)
+            {
+                if (useSSE2)
+                    convYUY2to422_SSE2(src, py, pu, pv, pitch1, pitch2Y, pitch2UV, width, height);
+                else
+                    convYUY2to422_c(src, py, pu, pv, pitch1, pitch2Y, pitch2UV, width, height);
+            }
+
+            void conv422toYUY2(const uint8_t* py, const uint8_t* pu, const uint8_t* pv,
+                uint8_t* dst, int pitch1Y, int pitch1UV, int pitch2, int width, int height, bool useSSE2)
+            {
+                if (useSSE2)
+                    conv422toYUY2_SSE2(py, pu, pv, dst, pitch1Y, pitch1UV, pitch2, width, height);
+                else
+                    conv422toYUY2_c(py, pu, pv, dst, pitch1Y, pitch1UV, pitch2, width, height);
+            }
+
             // Crash and/or corruption if MT. To be tested, why
             int __stdcall SetCacheHints(int cachehints, int frame_range) override {
                 return cachehints == CACHE_GET_MTMODE ? MT_SERIALIZED : 0;
@@ -1163,6 +1267,7 @@ public:
                     vi.IsRGB32() ? (env->GetVar("RGBA").AsBool() ? MSP_RGBA : MSP_RGB32) :
                     vi.IsRGB24() ? MSP_RGB24 :
                     vi.IsYUY2() ? MSP_YUY2 :
+                    vi.IsYV16() ? MSP_YUY2 :
                     /*vi.IsYV12()*/ vi.pixel_type == VideoInfo::CS_YV12 ? (s_fSwapUV ? MSP_IYUV : MSP_YV12) :
                     /*vi.IsIYUV()*/ vi.pixel_type == VideoInfo::CS_IYUV ? (s_fSwapUV ? MSP_YV12 : MSP_IYUV) :
                     vi.pixel_type == VideoInfo::CS_YUV420P10 ? MSP_P010 : // P.F. 180224 10 bit support
@@ -1170,7 +1275,9 @@ public:
                     -1;
 
                 if (dst.type == -1)
-                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YUV420P10 or YUV420P16.");
+                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YV16,YUV420P10 or YUV420P16.");
+
+                bool YV16asYUY2 = vi.IsYV16(); // must use single YUY2 buffer internally
 
                 bool semi_packed_p10 = (vi.pixel_type == VideoInfo::CS_YUV420P10) || (vi.pixel_type == VideoInfo::CS_YUV422P10);
                 bool semi_packed_p16 = (vi.pixel_type == VideoInfo::CS_YUV420P16) || (vi.pixel_type == VideoInfo::CS_YUV422P16);
@@ -1233,6 +1340,33 @@ public:
                     dst.bitsU = pdst_save + pitch * vi.height; // ? in P010 no separate pointers
                     dst.bitsV = pdst_save + pitch * vi.height;
                 }
+                else if (YV16asYUY2) {
+                    // for 8 bit YUV 4:2:2 only YUY2 is supported in xy
+                    VideoInfo vi2 = vi;
+                    vi2.width = vi.width * 2; // YUYV
+                    vi2.pixel_type = VideoInfo::CS_Y8; // single YUY2 buffer
+                    buffer = env->NewVideoFrame(vi2);
+                    BYTE* pdst = buffer->GetWritePtr();
+                    pdst_save = pdst;
+
+                    // luma
+                    int dstpitch = buffer->GetPitch();
+                    int srcpitch = frame->GetPitch();
+                    const BYTE* src = frame->GetReadPtr();
+                    conv422toYUY2(frame->GetReadPtr(PLANAR_Y), frame->GetReadPtr(PLANAR_U), frame->GetReadPtr(PLANAR_V),
+                        buffer->GetWritePtr(),
+                        frame->GetPitch(PLANAR_Y), frame->GetPitch(PLANAR_U), dstpitch,
+                        vi.width, vi.height,
+                        sse2);
+
+                    // buffer is ready.
+                    // Fill dst pointers
+                    dst.pitch = dstpitch;
+                    dst.pitchUV = 0; // n/a in YUY2 no separate UV pointers
+                    dst.bits = pdst;
+                    dst.bitsU = nullptr;
+                    dst.bitsV = nullptr;
+                }
                 else {
                     // 8 bit classic
                     env->MakeWritable(&frame);
@@ -1265,7 +1399,6 @@ public:
                     BYTE* pdst = frame->GetWritePtr();
 
                     int pitch = frame->GetPitch();
-                    //env->BitBlt(pdst, pitch, src, dst.pitch, dst.pitch, vi.height); // copy Y
 
                     // Luma
                     if (semi_packed_p16) {
@@ -1304,6 +1437,14 @@ public:
                         else
                             prepare_from_interleaved_uv_c<true>(pdstu, pdstv, pitchUV, src, dst.pitch, cwidth, cheight); // true: shift 6
                     }
+                    return frame;
+                }
+                else if (YV16asYUY2) {
+                    // YV16 was handled as YUY2 buffer internally, convert back
+                    PVideoFrame frame = env->NewVideoFrame(vi);
+                    convYUY2to422(buffer->GetReadPtr(), frame->GetWritePtr(PLANAR_Y), frame->GetWritePtr(PLANAR_U), frame->GetWritePtr(PLANAR_V),
+                        buffer->GetPitch(), frame->GetPitch(PLANAR_Y), frame->GetPitch(PLANAR_U),
+                        vi.width, vi.height, sse2);
                     return frame;
                 }
                 else {

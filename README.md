@@ -1,4 +1,4 @@
-# xy-VSFilter (pfmod) v3.2.0.803 (20210305)
+# xy-VSFilter (pfmod) v3.2.0.804 (20210306)
 https://github.com/pinterf/xy-VSFilter/
 
 Active branch: xy_sub_filter_rc5
@@ -29,6 +29,10 @@ Plus:
   XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
 
 # Change log:
+## v3.2.0.804 (20210306 - pinterf)
+* Add native YV16, YV24, P210 (YUV422P10) and P216 (YUV422P16) support.
+  From TextSub Avisynth filter they even work.
+
 ## v3.2.0.803 (20210305 - pinterf)
 * Source: new code base in new branch which finally works with Visual Studio 2019:\
   https://github.com/Cyberbeing/xy-VSFilter/tree/xy_sub_filter_rc5

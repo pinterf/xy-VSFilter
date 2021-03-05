@@ -939,9 +939,16 @@ public:
         class CAvisynthFilter : public GenericVideoFilter, virtual public CFilter
         {
         public:
+            bool has_at_least_v8; // avs interface version check
+
             VFRTranslator* vfr;
 
-            CAvisynthFilter(PClip c, IScriptEnvironment* env, VFRTranslator* _vfr = 0) : GenericVideoFilter(c), vfr(_vfr) {}
+            CAvisynthFilter(PClip c, IScriptEnvironment* env, VFRTranslator* _vfr = 0) : GenericVideoFilter(c), vfr(_vfr)
+            {
+                has_at_least_v8 = true;
+                try { env->CheckVersion(8); }
+                catch (const AvisynthError&) { has_at_least_v8 = false; }
+            }
 
             // Helpers for YUV420P10<->P010 and YUV420P16<->P016 conversion
 
@@ -1342,6 +1349,7 @@ public:
                 }
                 else if (YV16asYUY2) {
                     // for 8 bit YUV 4:2:2 only YUY2 is supported in xy
+                    // converting to internal format
                     VideoInfo vi2 = vi;
                     vi2.width = vi.width * 2; // YUYV
                     vi2.pixel_type = VideoInfo::CS_Y8; // single YUY2 buffer
@@ -1395,10 +1403,10 @@ public:
                 if (semi_packed_p10 || semi_packed_p16) {
                     // convert semi packed formats back to Avisynth YUV420P10 and P16 formats
                     BYTE* src = pdst_save; // dst.bits;
-                    PVideoFrame frame = env->NewVideoFrame(vi);
-                    BYTE* pdst = frame->GetWritePtr();
+                    PVideoFrame dst_frame = has_at_least_v8 ? env->NewVideoFrameP(vi, &frame) : env->NewVideoFrame(vi);
+                    BYTE* pdst = dst_frame->GetWritePtr();
 
-                    int pitch = frame->GetPitch();
+                    int pitch = dst_frame->GetPitch();
 
                     // Luma
                     if (semi_packed_p16) {
@@ -1416,9 +1424,9 @@ public:
                     // Chroma
                     int cheight = vi.height >> vi.GetPlaneHeightSubsampling(PLANAR_U);
                     int cwidth = vi.width >> vi.GetPlaneWidthSubsampling(PLANAR_U);
-                    int pitchUV = frame->GetPitch(PLANAR_U);
-                    BYTE* pdstu = frame->GetWritePtr(PLANAR_U);
-                    BYTE* pdstv = frame->GetWritePtr(PLANAR_V);
+                    int pitchUV = dst_frame->GetPitch(PLANAR_U);
+                    BYTE* pdstu = dst_frame->GetWritePtr(PLANAR_U);
+                    BYTE* pdstv = dst_frame->GetWritePtr(PLANAR_V);
                     if (sse41) {
                         if (semi_packed_p16)
                             prepare_from_interleaved_uv_sse2<false, true>(pdstu, pdstv, pitchUV, src, dst.pitch, cwidth, cheight);
@@ -1437,15 +1445,15 @@ public:
                         else
                             prepare_from_interleaved_uv_c<true>(pdstu, pdstv, pitchUV, src, dst.pitch, cwidth, cheight); // true: shift 6
                     }
-                    return frame;
+                    return dst_frame;
                 }
                 else if (YV16asYUY2) {
                     // YV16 was handled as YUY2 buffer internally, convert back
-                    PVideoFrame frame = env->NewVideoFrame(vi);
-                    convYUY2to422(buffer->GetReadPtr(), frame->GetWritePtr(PLANAR_Y), frame->GetWritePtr(PLANAR_U), frame->GetWritePtr(PLANAR_V),
-                        buffer->GetPitch(), frame->GetPitch(PLANAR_Y), frame->GetPitch(PLANAR_U),
+                    PVideoFrame dst_frame = has_at_least_v8 ? env->NewVideoFrameP(vi, &frame) : env->NewVideoFrame(vi);
+                    convYUY2to422(buffer->GetReadPtr(), dst_frame->GetWritePtr(PLANAR_Y), dst_frame->GetWritePtr(PLANAR_U), dst_frame->GetWritePtr(PLANAR_V),
+                        buffer->GetPitch(), dst_frame->GetPitch(PLANAR_Y), dst_frame->GetPitch(PLANAR_U),
                         vi.width, vi.height, sse2);
-                    return frame;
+                    return dst_frame;
                 }
                 else {
                     return frame;

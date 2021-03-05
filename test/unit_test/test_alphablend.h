@@ -19,7 +19,7 @@ TEST_F(AlphaBlendTest, CheckP010LumaSSE2)
             data2 = data1;
 
             mix_16_y_p010_c( data1.dst, data1.src, data1.alpha);
-            mix_16_y_p010_sse2( data2.dst, data2.src, data2.alpha);
+            mix_16_y_p010_P210_sse2( data2.dst, data2.src, data2.alpha);
 
             ASSERT_EQ(true, data1==data0)
                 <<"data0"<<data0
@@ -36,7 +36,7 @@ TEST_F(AlphaBlendTest, CheckP010LumaSSE2)
             data2 = data1;
 
             mix_16_y_p010_c( data1.dst, data1.src, data1.alpha);
-            mix_16_y_p010_sse2( data2.dst, data2.src, data2.alpha);
+            mix_16_y_p010_P210_sse2( data2.dst, data2.src, data2.alpha);
 
             ASSERT_EQ(true, data1==data2)
                 <<"data0"<<data0

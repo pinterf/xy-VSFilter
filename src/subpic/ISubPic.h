@@ -41,7 +41,12 @@ enum ColorType {
     MSP_P010,
     MSP_P016,
     MSP_NV12,
-    MSP_NV21
+    MSP_NV21,
+    MSP_P210, // 4:2:2 10 bits
+    MSP_P216, // 4:2:2 16 bits
+    MSP_YV16, // 4:2:2 8 bits
+    MSP_YV24  // 4:4:4 8 bits
+
 };
 
 #pragma pack(push, 1)

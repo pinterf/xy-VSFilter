@@ -28,11 +28,12 @@ private:
     SimpleSubpic(const SimpleSubpic&);
     void operator=(const SimpleSubpic&)const;
 
-    HRESULT AlphaBltAnv12_P010( SubPicDesc* target, const Bitmap& src );
+    HRESULT AlphaBltAnv12_P010_P210( SubPicDesc* target, const Bitmap& src, bool is422);
     HRESULT AlphaBltAnv12_Nv12(SubPicDesc* target, const Bitmap& src);
     HRESULT AlphaBlt(SubPicDesc* target, const Bitmap& src);
     HRESULT ConvertColorSpace();
     void SubsampleAndInterlace(int index, Bitmap*bitmap, bool u_first );
+    void SubsampleAndInterlace422(int index, Bitmap* bitmap, bool u_first);
 private:
     CComPtr<IXySubRenderFrame> m_sub_render_frame;
 

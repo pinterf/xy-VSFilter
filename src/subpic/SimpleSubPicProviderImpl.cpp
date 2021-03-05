@@ -288,6 +288,10 @@ bool SimpleSubPicProvider::IsSpdColorTypeSupported( int type )
                                     m_alpha_blt_dst_type == MSP_YV12 ||
                                     m_alpha_blt_dst_type == MSP_P010 ||
                                     m_alpha_blt_dst_type == MSP_P016 ||
+                                    m_alpha_blt_dst_type == MSP_YV16 ||
+                                    m_alpha_blt_dst_type == MSP_YV24 ||
+                                    m_alpha_blt_dst_type == MSP_P210 ||
+                                    m_alpha_blt_dst_type == MSP_P216 ||
                                     m_alpha_blt_dst_type == MSP_NV12 ||
                                     m_alpha_blt_dst_type == MSP_NV21)) )
     {

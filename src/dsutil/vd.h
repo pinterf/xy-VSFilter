@@ -39,6 +39,7 @@ extern bool BitBltFromYUY2ToRGB(int w, int h, BYTE* dst, int dstpitch, int dbpp,
 extern bool BitBltFromRGBToRGB(int w, int h, BYTE* dst, int dstpitch, int dbpp, BYTE* src, int srcpitch, int sbpp);
 
 extern bool BitBltFromP010ToP010(int w, int h, BYTE* dst, int dstpitch, const BYTE* src, int srcpitch);
+extern bool BitBltFromP210ToP210(int w, int h, BYTE* dst, int dstpitch, const BYTE* src, int srcpitch);
 extern bool BitBltFromNV12ToNV12(int w, int h, BYTE* dst, int dstpitch, const BYTE* src, int srcpitch);
 
 extern void DeinterlaceBlend(BYTE* dst, BYTE* src, DWORD rowbytes, DWORD h, DWORD dstpitch, DWORD srcpitch);

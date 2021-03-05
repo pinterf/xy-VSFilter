@@ -46,7 +46,11 @@ STDMETHODIMP SimpleSubpic::AlphaBlt( SubPicDesc* target )
             break;
         case MSP_P010:
         case MSP_P016:
-            hr = AlphaBltAnv12_P010(target, m_bitmap.GetAt(i));
+            hr = AlphaBltAnv12_P010_P210(target, m_bitmap.GetAt(i), false);
+            break;
+        case MSP_P210:
+        case MSP_P216:
+            hr = AlphaBltAnv12_P010_P210(target, m_bitmap.GetAt(i), true);
             break;
         default:
             hr = AlphaBlt(target, m_bitmap.GetAt(i));
@@ -62,7 +66,7 @@ STDMETHODIMP SimpleSubpic::AlphaBlt( SubPicDesc* target )
     return hr;
 }
 
-HRESULT SimpleSubpic::AlphaBltAnv12_P010( SubPicDesc* target, const Bitmap& src )
+HRESULT SimpleSubpic::AlphaBltAnv12_P010_P210( SubPicDesc* target, const Bitmap& src, bool is422)
 {
     //fix me: check colorspace and log error
     SubPicDesc dst = *target; // copy, because we might modify it
@@ -82,13 +86,20 @@ HRESULT SimpleSubpic::AlphaBltAnv12_P010( SubPicDesc* target, const Bitmap& src 
     BYTE* dUV = NULL;
     if(!bottom_down)
     {
-        d = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*rd.top + rd.left*2;
-        dUV = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*dst.h + dst.pitch*rd.top/2 + rd.left*2;
+        d = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*rd.top + rd.left*2; // 2: sizeof(uint16_t)
+        // UV left*2: rd.left / subsampling_2 * (UandVSideBySide_2) * sizeof(uint16_t) = rd_left/2*2*2
+        if (is422)  // P210 P216
+            dUV = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch * dst.h + dst.pitch * rd.top + rd.left * 2;
+        else // P010 P016
+            dUV = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*dst.h + dst.pitch*rd.top/2 + rd.left*2;
     }
     else
     {
         d = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*(rd.top-1) + rd.left*2;
-        dUV = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*dst.h + dst.pitch*(rd.top/2-1) + rd.left*2;
+        if (is422)  // P210 P216
+            dUV = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch * dst.h + dst.pitch * (rd.top - 1) + rd.left * 2;
+        else // P010 P016
+            dUV = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*dst.h + dst.pitch*(rd.top/2-1) + rd.left*2;
         dst.pitch = -dst.pitch;
     }
     ASSERT(dst.pitchUV==0 || dst.pitchUV==abs(dst.pitch));
@@ -97,8 +108,12 @@ HRESULT SimpleSubpic::AlphaBltAnv12_P010( SubPicDesc* target, const Bitmap& src 
     const BYTE* sa = reinterpret_cast<const BYTE*>(src.extra.plans[A]);
     const BYTE* sy = reinterpret_cast<const BYTE*>(src.extra.plans[Y]);
     const BYTE* s_uv = reinterpret_cast<const BYTE*>(src.extra.plans[UV]);
-    return CMemSubPic::AlphaBltAnv12_P010(sa, sy, s_uv, src.pitch, d, dUV, dst.pitch, w, h);
+    if (is422)
+        return CMemSubPic::AlphaBltAnv12_P210(sa, sy, s_uv, src.pitch, d, dUV, dst.pitch, w, h);
+    else
+        return CMemSubPic::AlphaBltAnv12_P010(sa, sy, s_uv, src.pitch, d, dUV, dst.pitch, w, h);
 }
+
 
 HRESULT SimpleSubpic::AlphaBltAnv12_Nv12( SubPicDesc* target, const Bitmap& src )
 {
@@ -162,7 +177,7 @@ HRESULT SimpleSubpic::AlphaBlt( SubPicDesc* target, const Bitmap& src )
         {
             d = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*(rd.top-1) + (rd.left*dst.bpp>>3);
         }
-        else if(dst.type == MSP_YV12 || dst.type == MSP_IYUV)
+        else if(dst.type == MSP_YV12 || dst.type == MSP_IYUV || dst.type == MSP_YV16 || dst.type == MSP_YV24)
         {
             d = reinterpret_cast<BYTE*>(dst.bits) + dst.pitch*(rd.top-1) + (rd.left*8>>3);
         }
@@ -332,6 +347,80 @@ HRESULT SimpleSubpic::AlphaBlt( SubPicDesc* target, const Bitmap& src )
 #endif
         }
         break;
+    case MSP_YV16:
+    {
+        //dst.pitch = abs(dst.pitch);
+        int h2 = h;
+        if (!dst.pitchUV)
+        {
+            dst.pitchUV = abs(dst.pitch);
+        }
+        if (!dst.bitsU || !dst.bitsV)
+        {
+            dst.bitsU = reinterpret_cast<BYTE*>(dst.bits) + abs(dst.pitch) * dst.h;
+            dst.bitsV = dst.bitsU + dst.pitchUV * dst.h;
+        }
+        BYTE* dd[2];
+        dd[0] = dst.bitsU + dst.pitchUV * rd.top + rd.left / 2; // only horiz. subsampling
+        dd[1] = dst.bitsV + dst.pitchUV * rd.top + rd.left / 2;
+        if (rd.top > rd.bottom)
+        {
+            dd[0] = dst.bitsU + dst.pitchUV * (rd.top - 1) + rd.left / 2;
+            dd[1] = dst.bitsV + dst.pitchUV * (rd.top - 1) + rd.left / 2;
+            dst.pitchUV = -dst.pitchUV;
+        }
+
+        enum PLANS { A = 0, Y, U, V };
+        const BYTE* sa = reinterpret_cast<const BYTE*>(src.extra.plans[A]);
+        const BYTE* sy = reinterpret_cast<const BYTE*>(src.extra.plans[Y]);
+        const BYTE* su = reinterpret_cast<const BYTE*>(src.extra.plans[U]);
+        const BYTE* sv = reinterpret_cast<const BYTE*>(src.extra.plans[V]);
+        CMemSubPic::AlphaBltYv12Luma(d, dst.pitch, w, h, sy, sa, src.pitch); // good for YV16
+        CMemSubPic::AlphaBltYv16Chroma(dd[0], dst.pitchUV, w, h2, su, sa, src.pitch);
+        CMemSubPic::AlphaBltYv16Chroma(dd[1], dst.pitchUV, w, h2, sv, sa, src.pitch);
+#ifndef _WIN64
+        // TODOX64 : fixme!
+        _mm_empty();
+#endif
+    }
+    break;
+    case MSP_YV24:
+    {
+        //dst.pitch = abs(dst.pitch);
+        int h2 = h;
+        if (!dst.pitchUV)
+        {
+            dst.pitchUV = abs(dst.pitch);
+        }
+        if (!dst.bitsU || !dst.bitsV)
+        {
+            dst.bitsU = reinterpret_cast<BYTE*>(dst.bits) + abs(dst.pitch) * dst.h;
+            dst.bitsV = dst.bitsU + dst.pitchUV * dst.h;
+        }
+        BYTE* dd[2];
+        dd[0] = dst.bitsU + dst.pitchUV * rd.top + rd.left; // 4:4:4: no subsampling
+        dd[1] = dst.bitsV + dst.pitchUV * rd.top + rd.left;
+        if (rd.top > rd.bottom)
+        {
+            dd[0] = dst.bitsU + dst.pitchUV * (rd.top - 1) + rd.left;
+            dd[1] = dst.bitsV + dst.pitchUV * (rd.top - 1) + rd.left;
+            dst.pitchUV = -dst.pitchUV;
+        }
+
+        enum PLANS { A = 0, Y, U, V };
+        const BYTE* sa = reinterpret_cast<const BYTE*>(src.extra.plans[A]);
+        const BYTE* sy = reinterpret_cast<const BYTE*>(src.extra.plans[Y]);
+        const BYTE* su = reinterpret_cast<const BYTE*>(src.extra.plans[U]);
+        const BYTE* sv = reinterpret_cast<const BYTE*>(src.extra.plans[V]);
+        CMemSubPic::AlphaBltYv12Luma(d, dst.pitch, w, h, sy, sa, src.pitch); // good for YV16,YV24
+        CMemSubPic::AlphaBltYv12Luma(dd[0], dst.pitchUV, w, h2, su, sa, src.pitch);// good for YV24 luma
+        CMemSubPic::AlphaBltYv12Luma(dd[1], dst.pitchUV, w, h2, sv, sa, src.pitch);
+#ifndef _WIN64
+        // TODOX64 : fixme!
+        _mm_empty();
+#endif
+    }
+    break;
     default:
         return E_NOTIMPL;
         break;
@@ -447,16 +536,22 @@ HRESULT SimpleSubpic::ConvertColorSpace()
                 }
             }
         }
-        else if(m_alpha_blt_dst_type == MSP_YV12 || m_alpha_blt_dst_type == MSP_IYUV )
+        else if(m_alpha_blt_dst_type == MSP_YV12 || m_alpha_blt_dst_type == MSP_IYUV ||
+            m_alpha_blt_dst_type == MSP_YV16 || m_alpha_blt_dst_type == MSP_YV24)
         {
             ASSERT(xy_color_space==XY_CS_AYUV_PLANAR);
             //nothing to do
         }
-        else if ( m_alpha_blt_dst_type == MSP_P010 || m_alpha_blt_dst_type == MSP_P016 
+        else if ( m_alpha_blt_dst_type == MSP_P010 || m_alpha_blt_dst_type == MSP_P016
             || m_alpha_blt_dst_type == MSP_NV12 )
         {
             ASSERT(xy_color_space==XY_CS_AYUV_PLANAR);
             SubsampleAndInterlace(i, &bitmap, true);
+        }
+        else if (m_alpha_blt_dst_type == MSP_P210 || m_alpha_blt_dst_type == MSP_P216)
+        {
+            ASSERT(xy_color_space == XY_CS_AYUV_PLANAR);
+            SubsampleAndInterlace422(i, &bitmap, true);
         }
         else if( m_alpha_blt_dst_type == MSP_NV21 )
         {
@@ -476,7 +571,7 @@ void SimpleSubpic::SubsampleAndInterlace( int index, Bitmap*bitmap, bool u_first
     const BYTE* u_start = reinterpret_cast<const BYTE*>(bitmap->extra.plans[2]);
     const BYTE* v_start = reinterpret_cast<const BYTE*>(bitmap->extra.plans[3]);
 
-    BYTE* dst = reinterpret_cast<BYTE*>(xy_malloc(bitmap->pitch*h/2, bitmap->pos.x&15));
+    BYTE* dst = reinterpret_cast<BYTE*>(xy_malloc(bitmap->pitch*h / 4 * 2, bitmap->pos.x&15));
     m_buffers.GetAt(index) = dst;
     bitmap->extra.plans[2] = dst;
 
@@ -513,3 +608,50 @@ void SimpleSubpic::SubsampleAndInterlace( int index, Bitmap*bitmap, bool u_first
         }
     }
 }
+void SimpleSubpic::SubsampleAndInterlace422(int index, Bitmap* bitmap, bool u_first)
+{
+    ASSERT(bitmap != NULL);
+    //fix me: check alignment and log error
+    int w = bitmap->size.cx, h = bitmap->size.cy;
+    // ASSERT(h % 2 == 0); no vertical subsampling
+    const BYTE* u_start = reinterpret_cast<const BYTE*>(bitmap->extra.plans[2]);
+    const BYTE* v_start = reinterpret_cast<const BYTE*>(bitmap->extra.plans[3]);
+    // alloc for UV
+    BYTE* dst = reinterpret_cast<BYTE*>(xy_malloc(bitmap->pitch * h / 2 * 2, bitmap->pos.x & 15));
+    m_buffers.GetAt(index) = dst;
+    bitmap->extra.plans[2] = dst;
+
+    if (!u_first)
+    {
+        const BYTE* tmp = v_start;
+        v_start = u_start;
+        u_start = tmp;
+    }
+
+    //Todo: fix me. 
+    //Walkarround for alignment
+    if (((bitmap->pitch | (intptr_t)u_start | (intptr_t)v_start) & 15) == 0)
+    {
+        for (int i = 0; i < h; i += 1)
+        {
+            int w16 = w & ~15;
+            subsample_422_and_interlace_2_line_sse2(dst, u_start, v_start, w16, bitmap->pitch);
+            ASSERT(w > 0);
+            subsample_422_and_interlace_2_line_c(dst + w16, u_start + w16, v_start + w16, w & 15, bitmap->pitch, -1);
+            u_start += 1*bitmap->pitch;
+            v_start += 1*bitmap->pitch;
+            dst += bitmap->pitch;
+        }
+    }
+    else
+    {
+        for (int i = 0; i < h; i += 1)
+        {
+            subsample_422_and_interlace_2_line_c(dst, u_start, v_start, w, bitmap->pitch);
+            u_start += 1*bitmap->pitch;
+            v_start += 1*bitmap->pitch;
+            dst += bitmap->pitch;
+        }
+    }
+}
+

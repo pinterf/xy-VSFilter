@@ -1252,47 +1252,57 @@ public:
                 const bool sse2 = (env->GetCPUFlags() & CPUF_SSE2) != 0;
                 const bool sse41 = (env->GetCPUFlags() & CPUF_SSE4_1) != 0;
 
+                const bool doYV16asYUY2 = false; // hey, we have native YV16 now
+
                 SubPicDesc dst;
                 // dst pointers: later
                 dst.w = vi.width;
                 dst.h = vi.height;
 
-                // PF todo: check what to put here for 10 bits? 10 or 16? Now pitch/dst.w would 
-                // dst.bpp = dst.pitch / dst.w * 8; //vi.BitsPerPixel();
-                if (vi.BitsPerComponent() == 10)
-                    dst.bpp = 16;
-                if (vi.BitsPerComponent() == 16)
-                    dst.bpp = 16;
-                else
-                    // PF180224  fix1: not pitch/width but rowsize/width should be used!!
-                    dst.bpp = frame->GetRowSize() / dst.w * 8; //vi.BitsPerPixel();
-
-                BYTE* pdst_save;
-                PVideoFrame buffer;
-
                 dst.type =
                     vi.IsRGB32() ? (env->GetVar("RGBA").AsBool() ? MSP_RGBA : MSP_RGB32) :
                     vi.IsRGB24() ? MSP_RGB24 :
                     vi.IsYUY2() ? MSP_YUY2 :
-                    vi.IsYV16() ? MSP_YUY2 :
+                    doYV16asYUY2 && vi.IsYV16() ? MSP_YUY2 :
                     /*vi.IsYV12()*/ vi.pixel_type == VideoInfo::CS_YV12 ? (s_fSwapUV ? MSP_IYUV : MSP_YV12) :
                     /*vi.IsIYUV()*/ vi.pixel_type == VideoInfo::CS_IYUV ? (s_fSwapUV ? MSP_YV12 : MSP_IYUV) :
                     vi.pixel_type == VideoInfo::CS_YUV420P10 ? MSP_P010 : // P.F. 180224 10 bit support
                     vi.pixel_type == VideoInfo::CS_YUV420P16 ? MSP_P016 : // P.F. 180224 16 bit support
+                    // 20210305
+                    vi.pixel_type == VideoInfo::CS_YUV422P10 ? MSP_P210 :
+                    vi.pixel_type == VideoInfo::CS_YUV422P16 ? MSP_P216 :
+                    vi.IsYV16() ? MSP_YV16 : // not natively yet. converted to YUY2 on the fly
+                    vi.IsYV24() ? MSP_YV24 :
                     -1;
 
                 if (dst.type == -1)
-                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YV16,YUV420P10 or YUV420P16.");
+                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YV16,YV24,YUV420P10/P16,YUV422P10/P16.");
 
-                bool YV16asYUY2 = vi.IsYV16(); // must use single YUY2 buffer internally
+                bool YV16asYUY2 = doYV16asYUY2 && vi.IsYV16(); // must use single YUY2 buffer internally
 
                 bool semi_packed_p10 = (vi.pixel_type == VideoInfo::CS_YUV420P10) || (vi.pixel_type == VideoInfo::CS_YUV422P10);
                 bool semi_packed_p16 = (vi.pixel_type == VideoInfo::CS_YUV420P16) || (vi.pixel_type == VideoInfo::CS_YUV422P16);
-                // P010/P016 format:
+
+                // PF todo: check what to put here for 10 bits? 10 or 16? Now pitch/dst.w would 
+                // dst.bpp = dst.pitch / dst.w * 8; //vi.BitsPerPixel();
+                if (vi.BitsPerComponent() == 10)
+                    dst.bpp = 16;
+                else if (vi.BitsPerComponent() == 16)
+                    dst.bpp = 16;
+                else if(YV16asYUY2)
+                    dst.bpp = 2 * frame->GetRowSize() / dst.w * 8;
+                else
+                    dst.bpp = frame->GetRowSize() / dst.w * 8;
+
+                BYTE* pdst_save;
+                PVideoFrame buffer;
+
+                // P010/P016/P210/P216 format:
                 // Single buffer
                 // n lines   YYYYYYYYYYYYYY
-                // n/2 lines UVUVUVUVUVUVUV
-                // Pitch is common. P010 is upshifted to 16 bits
+                // n/2 lines UVUVUVUVUVUVUV (4:2:0)
+                // or n lines UVUVUVUVUVUVUV (4:2:2)
+                // Pitch is common. P010/P210 is upshifted to 16 bits
 
                 if (semi_packed_p10 || semi_packed_p16) {
                     VideoInfo vi2 = vi;

@@ -46,7 +46,8 @@ static void LogSubPicStartStop( const REFERENCE_TIME& rtStart, const REFERENCE_T
 void BltLineRGB32(DWORD* d, BYTE* sub, int w, const GUID& subtype)
 {
     if(subtype == MEDIASUBTYPE_YV12 || subtype == MEDIASUBTYPE_I420 || subtype == MEDIASUBTYPE_IYUV 
-        || subtype == MEDIASUBTYPE_NV12 || subtype == MEDIASUBTYPE_NV21)
+        || subtype == MEDIASUBTYPE_NV12 || subtype == MEDIASUBTYPE_NV21
+        || subtype == MEDIASUBTYPE_YV16 || subtype == MEDIASUBTYPE_YV24)
     {
         //TODO: Fix ME!
         BYTE* db = (BYTE*)d;
@@ -57,7 +58,8 @@ void BltLineRGB32(DWORD* d, BYTE* sub, int w, const GUID& subtype)
             *db = (*db+*sub)>>1;
         }
     }
-    else if(subtype == MEDIASUBTYPE_P010 || subtype == MEDIASUBTYPE_P016)
+    else if(subtype == MEDIASUBTYPE_P010 || subtype == MEDIASUBTYPE_P016
+        || subtype == MEDIASUBTYPE_P210 || subtype == MEDIASUBTYPE_P216)
     {
         //TODO: Fix ME!
         WORD* db = reinterpret_cast<WORD*>(d);

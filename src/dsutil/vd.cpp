@@ -388,6 +388,17 @@ bool BitBltFromP010ToP010(int w, int h, BYTE* dst, int dstpitch, const BYTE* src
     return true;
 }
 
+bool BitBltFromP210ToP210(int w, int h, BYTE* dst, int dstpitch, const BYTE* src, int srcpitch)
+{
+    if (w <= 0 || h <= 0) {
+        return true;
+    }
+    ASSERT(dst && src && w * 2 <= srcpitch && w * 2 <= dstpitch);
+    VDMemcpyRect(dst, dstpitch, src, srcpitch, w * 2, h + h);
+
+    return true;
+}
+
 bool BitBltFromNV12ToNV12(int w, int h, BYTE* dst, int dstpitch, const BYTE* src, int srcpitch)
 {
     if (w <= 0 || h <= 0) {

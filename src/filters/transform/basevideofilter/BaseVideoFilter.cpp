@@ -39,11 +39,15 @@ const GUID* InputFmts[] =
 {
     &MEDIASUBTYPE_P010,
     &MEDIASUBTYPE_P016,
+    &MEDIASUBTYPE_P210,
+    &MEDIASUBTYPE_P216,
     &MEDIASUBTYPE_NV12,
     &MEDIASUBTYPE_NV21,
     &MEDIASUBTYPE_YV12, 
     &MEDIASUBTYPE_I420, 
-    &MEDIASUBTYPE_IYUV, 
+    &MEDIASUBTYPE_YV16,
+    &MEDIASUBTYPE_YV24,
+    &MEDIASUBTYPE_IYUV,
     &MEDIASUBTYPE_YUY2, 
     &MEDIASUBTYPE_AYUV,
     &MEDIASUBTYPE_ARGB32, 
@@ -55,11 +59,15 @@ const GUID* InputFmts[] =
 
 const OutputFormatBase OutputFmts[] =
 {
+    {&MEDIASUBTYPE_P210, 2, 32, '012P'},
+    {&MEDIASUBTYPE_P216, 2, 32, '612P'},
     {&MEDIASUBTYPE_P010, 2, 24, '010P'},
     {&MEDIASUBTYPE_P016, 2, 24, '610P'},
     {&MEDIASUBTYPE_NV12, 2, 12, '21VN'},
     {&MEDIASUBTYPE_NV21, 2, 12, '12VN'},
     {&MEDIASUBTYPE_YV12, 3, 12, '21VY'},
+    {&MEDIASUBTYPE_YV12, 3, 16, '61VY'},
+    {&MEDIASUBTYPE_YV12, 3, 24, '42VY'},
     {&MEDIASUBTYPE_I420, 3, 12, '024I'},
     {&MEDIASUBTYPE_IYUV, 3, 12, 'VUYI'},
     {&MEDIASUBTYPE_YUY2, 1, 16, '2YUY'},
@@ -372,12 +380,26 @@ HRESULT CBaseVideoFilter::CopyBuffer(BYTE* pOut, BYTE** ppIn, int w, int h, int 
             ppIn[1] += (pitchIn>>1)*((h>>1)-1);
 		    ppIn[2] += (pitchIn>>1)*((h>>1)-1);
         }
-        else if(subtype == MEDIASUBTYPE_P010 || subtype == MEDIASUBTYPE_P016 
+        else if (subtype == MEDIASUBTYPE_YV16)
+        {
+            ppIn[1] += (pitchIn >> 1) * (h - 1);
+            ppIn[2] += (pitchIn >> 1) * (h - 1);
+        }
+        else if (subtype == MEDIASUBTYPE_YV24)
+        {
+            ppIn[1] += pitchIn * (h - 1);
+            ppIn[2] += pitchIn * (h - 1);
+        }
+        else if(subtype == MEDIASUBTYPE_P010 || subtype == MEDIASUBTYPE_P016
             || subtype == MEDIASUBTYPE_NV12 || subtype == MEDIASUBTYPE_NV21)
         {
             ppIn[1] += pitchIn*((h>>1)-1);
         }
-		pitchIn = -pitchIn;
+        else if (subtype == MEDIASUBTYPE_P210 || subtype == MEDIASUBTYPE_P216)
+        {
+            ppIn[1] += pitchIn * (h - 1);
+        }
+        pitchIn = -pitchIn;
 	}
 
 	if(subtype == MEDIASUBTYPE_I420 || subtype == MEDIASUBTYPE_IYUV || subtype == MEDIASUBTYPE_YV12)
@@ -422,7 +444,13 @@ HRESULT CBaseVideoFilter::CopyBuffer(BYTE* pOut, BYTE** ppIn, int w, int h, int 
             return VFW_E_TYPE_NOT_ACCEPTED;
         BitBltFromP010ToP010(w, h, pOut, bihOut.biWidth*2, ppIn[0], pitchIn);
     }
-    else if(subtype == MEDIASUBTYPE_NV12 || subtype == MEDIASUBTYPE_NV21) 
+    else if (subtype == MEDIASUBTYPE_P210 || subtype == MEDIASUBTYPE_P216)
+    {
+        if (bihOut.biCompression != subtype.Data1)
+            return VFW_E_TYPE_NOT_ACCEPTED;
+        BitBltFromP210ToP210(w, h, pOut, bihOut.biWidth * 2, ppIn[0], pitchIn);
+    }
+    else if(subtype == MEDIASUBTYPE_NV12 || subtype == MEDIASUBTYPE_NV21)
     {
         if (bihOut.biCompression != subtype.Data1)
             return VFW_E_TYPE_NOT_ACCEPTED;

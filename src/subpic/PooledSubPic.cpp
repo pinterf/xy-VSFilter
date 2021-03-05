@@ -87,8 +87,12 @@ CPooledSubPicAllocator::CPooledSubPicAllocator( int alpha_blt_dst_type, SIZE max
             break;
         case MSP_IYUV:
         case MSP_YV12:
+        case MSP_YV16:
+        case MSP_YV24:
         case MSP_P010:
         case MSP_P016:
+        case MSP_P210:
+        case MSP_P216:
         case MSP_NV12:
         case MSP_NV21:
             _type = MSP_AYUV_PLANAR;
@@ -203,7 +207,12 @@ STDMETHODIMP_(bool) CPooledSubPicAllocator::IsSpdColorTypeSupported( int type )
                             _alpha_blt_dst_type == MSP_P010 ||
                             _alpha_blt_dst_type == MSP_P016 ||
                             _alpha_blt_dst_type == MSP_NV12 ||
-                            _alpha_blt_dst_type == MSP_NV21)) )
+                            _alpha_blt_dst_type == MSP_NV21 ||
+                            _alpha_blt_dst_type == MSP_YV16 ||
+                            _alpha_blt_dst_type == MSP_YV24 ||
+                            _alpha_blt_dst_type == MSP_P210 ||
+                            _alpha_blt_dst_type == MSP_P216
+            )) )
     {
         return true;
     }

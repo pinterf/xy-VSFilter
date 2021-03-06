@@ -3499,7 +3499,11 @@ void CRenderedTextSubtitle::RenderOneSubtitle( const SIZECoor2& output_size,
         case 1: margin.y = video_org.y;                      break; //do not move so that it aligns with the middle of the video
         case 2: margin.y = video_org.y + margin_rect.bottom; break;//move to bottom
         }
-        ASSERT(clipRect.Width()*MAX_SUB_PIXEL==output_size.cx && clipRect.Height()*MAX_SUB_PIXEL==output_size.cy);
+        ASSERT(clipRect.Width() * MAX_SUB_PIXEL == output_size.cx &&
+                ( (clipRect.Height() * MAX_SUB_PIXEL == output_size.cy) ||
+                  ((clipRect.Height() + 1) & ~1) * MAX_SUB_PIXEL == ((output_size.cy + 1) & ~1)
+                ));
+        // Do not assert when height is e.g. 413*8 instead of 414*8. YV12 SubSampling? FIXME to check
         clipRect.SetRect(0,0, 
             (output_size.cx + video_org.x+margin_rect.left+margin_rect.right)>>3,
             (output_size.cy + video_org.y+margin_rect.top +margin_rect.bottom)>>3);

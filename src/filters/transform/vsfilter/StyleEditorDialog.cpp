@@ -220,12 +220,12 @@ void CStyleEditorPPage::AskColor(int i)
 }
 
 BEGIN_MESSAGE_MAP(CStyleEditorPPage, CPropertyPage)
-	ON_BN_CLICKED(IDC_BUTTON1, OnBnClickedButton1)
-	ON_STN_CLICKED(IDC_COLORPRI, OnStnClickedColorpri)
-	ON_STN_CLICKED(IDC_COLORSEC, OnStnClickedColorsec)
-	ON_STN_CLICKED(IDC_COLOROUTL, OnStnClickedColoroutl)
-	ON_STN_CLICKED(IDC_COLORSHAD, OnStnClickedColorshad)
-	ON_BN_CLICKED(IDC_CHECK1, OnBnClickedCheck1)
+	ON_BN_CLICKED(IDC_BUTTON1, &CStyleEditorPPage::OnBnClickedButton1)
+	ON_STN_CLICKED(IDC_COLORPRI, &CStyleEditorPPage::OnStnClickedColorpri)
+	ON_STN_CLICKED(IDC_COLORSEC, &CStyleEditorPPage::OnStnClickedColorsec)
+	ON_STN_CLICKED(IDC_COLOROUTL, &CStyleEditorPPage::OnStnClickedColoroutl)
+	ON_STN_CLICKED(IDC_COLORSHAD, &CStyleEditorPPage::OnStnClickedColorshad)
+	ON_BN_CLICKED(IDC_CHECK1, &CStyleEditorPPage::OnBnClickedCheck1)
 	ON_WM_HSCROLL()
 END_MESSAGE_MAP()
 

@@ -77,7 +77,7 @@ namespace ssf
 		int id;
 		Color color;
 		float width;
-		struct Fill() : id(0) {}
+        Fill() : id(0) {}
 	};
 
 	struct Style

@@ -353,7 +353,7 @@ HRESULT XySubFilterAutoLoader::GetMerit( const GUID& clsid, DWORD *merit )
     write it back.
     */
 
-    key_name.Format(_T("CLSID\\{083863F1-70DE-11d0-BD40-00A0C911CE86}\\Instance\\%s"), str_clsid);
+    key_name.Format(_T("CLSID\\{083863F1-70DE-11d0-BD40-00A0C911CE86}\\Instance\\%s"), str_clsid.GetString());
     CRegKey key;
     if (key.Open(HKEY_CLASSES_ROOT, key_name, KEY_READ) == ERROR_SUCCESS) { 
         ULONG size = 256*1024;

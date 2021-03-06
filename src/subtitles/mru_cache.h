@@ -1194,7 +1194,7 @@ class KTraits = CElementTraits< K >
 class EnhancedXyMru:public XyMru<K,V,KTraits>
 {
 public:
-    EnhancedXyMru(std::size_t max_item_num):XyMru(max_item_num),_cache_hit(0),_query_count(0){}
+    EnhancedXyMru(std::size_t max_item_num):XyMru<K, V, KTraits>(max_item_num),_cache_hit(0),_query_count(0){}
 
     std::size_t SetMaxItemNum( std::size_t max_item_num, bool clear_statistic_info=false )
     {

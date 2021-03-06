@@ -2575,8 +2575,8 @@ CStringW XySubFilter::DumpProviderInfo()
     CAutoLock cAutoLock(&m_csProviderFields);
     CStringW strTemp;
     strTemp.Format(L"name:'%ls' version:'%ls' yuvMatrix:'%ls' outputLevels:'%ls' combineBitmaps:%ls",
-        m_xy_str_opt[STRING_NAME]      , m_xy_str_opt[STRING_VERSION],
-        m_xy_str_opt[STRING_YUV_MATRIX], m_xy_str_opt[STRING_OUTPUT_LEVELS],
+        m_xy_str_opt[STRING_NAME].GetString()      , m_xy_str_opt[STRING_VERSION].GetString(),
+        m_xy_str_opt[STRING_YUV_MATRIX].GetString(), m_xy_str_opt[STRING_OUTPUT_LEVELS].GetString(),
         m_xy_bool_opt[BOOL_COMBINE_BITMAPS]?L"True":L"False");
     return strTemp;
 }
@@ -2586,7 +2586,7 @@ CStringW XySubFilter::DumpConsumerInfo()
     CAutoLock cAutolock(&m_csFilter);
     CStringW strTemp;
     strTemp.Format(L"name:'%ls' version:'%ls' yuvMatrix:'%ls' supportedLevels:'%d'",
-        m_xy_str_opt[STRING_CONNECTED_CONSUMER], m_xy_str_opt[STRING_CONSUMER_VERSION],
-        m_xy_str_opt[STRING_CONSUMER_YUV_MATRIX], m_xy_int_opt[INT_CONSUMER_SUPPORTED_LEVELS]);
+        m_xy_str_opt[STRING_CONNECTED_CONSUMER].GetString(), m_xy_str_opt[STRING_CONSUMER_VERSION].GetString(),
+        m_xy_str_opt[STRING_CONSUMER_YUV_MATRIX].GetString(), m_xy_int_opt[INT_CONSUMER_SUPPORTED_LEVELS]);
     return strTemp;
 }

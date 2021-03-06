@@ -1208,7 +1208,7 @@ bool CDVSAboutPPage::OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
             LocalFree(name);
 
             version.Format("%ls %s (git %s)\nxy-VSFilter\nCopyright 2001-2012 Yu Zhuohuang, Gabest et. al.", 
-                str_name.GetString(), XY_ABOUT_VERSION_STR, version_sha1_short);
+                str_name.GetString(), XY_ABOUT_VERSION_STR, version_sha1_short.GetString());
 
             SetDlgItemTextA( m_Dlg, IDC_VERSION, version.GetString() );
             break;

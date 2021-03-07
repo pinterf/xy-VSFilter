@@ -28,6 +28,7 @@
 #include "subpixel_position_controler.h"
 #include "xy_overlay_paint_machine.h"
 #include "xy_clipper_paint_machine.h"
+#include "..\dsutil\DSUtil.h"
 
 #if ENABLE_XY_LOG_TEXT_PARSER
 #  define TRACE_PARSER(msg) XY_LOG_TRACE(msg)
@@ -3048,10 +3049,9 @@ STDMETHODIMP_(POSITION) CRenderedTextSubtitle::GetStartPosition(REFERENCE_TIME r
     m_fps = fps;
 
     int iSegment;
-    rt /= 10000i64;
-    const STSSegment *stss = SearchSubs((int)rt, fps, &iSegment, NULL);
+    const STSSegment* stss = SearchSubs(rt, fps, &iSegment, NULL);
     if(stss==NULL) {
-        TRACE_PARSER("No subtitle at "<<XY_LOG_VAR_2_STR(rt));
+        TRACE_PARSER("No subtitle at "<<XY_LOG_VAR_2_STR(RT2MS(rt)));
         return NULL;
     }
     return (POSITION)(iSegment + 1);
@@ -3070,19 +3070,19 @@ STDMETHODIMP_(POSITION) CRenderedTextSubtitle::GetNext(POSITION pos)
 
 STDMETHODIMP_(REFERENCE_TIME) CRenderedTextSubtitle::GetStart(POSITION pos, double fps)
 {
-    return(10000i64 * TranslateSegmentStart((int)pos-1, fps));
+    return TranslateSegmentStart((int)pos - 1, fps);
 }
 
 STDMETHODIMP_(REFERENCE_TIME) CRenderedTextSubtitle::GetStop(POSITION pos, double fps)
 {
-	return(10000i64 * TranslateSegmentEnd((int)pos-1, fps));
+    return TranslateSegmentEnd((int)pos - 1, fps);
 }
 
 //@start, @stop: -1 if segment not found; @stop may < @start if subIndex exceed uppper bound
 STDMETHODIMP_(VOID) CRenderedTextSubtitle::GetStartStop(POSITION pos, double fps, /*out*/REFERENCE_TIME &start, /*out*/REFERENCE_TIME &stop)
 {
     int iSegment = (int)pos-1;
-    int tempStart, tempEnd;
+    REFERENCE_TIME tempStart, tempEnd;
     TranslateSegmentStartEnd(iSegment, fps, tempStart, tempEnd);
     start = tempStart;
     stop = tempEnd;
@@ -3111,10 +3111,9 @@ HRESULT CRenderedTextSubtitle::ParseScript(REFERENCE_TIME rt, double fps, CSubti
 {
     TRACE_RENDERER_REQUEST("Begin search subtitle segment");
     //fix me: check input and log error
-    int t = (int)(rt / 10000);
     int segment;
     //const
-    STSSegment* stss = SearchSubs2(t, fps, &segment);
+    STSSegment* stss = SearchSubs2(rt, fps, &segment);
     if(!stss) return S_FALSE;
     // clear any cached subs that has been passed
     {
@@ -3125,7 +3124,7 @@ HRESULT CRenderedTextSubtitle::ParseScript(REFERENCE_TIME rt, double fps, CSubti
             POSITION pos_old = pos;
             int key = m_subtitleCacheEntry.GetNext(pos);
             STSEntry& stse = m_entries.GetAt(key);
-            if(stse.end <= t)
+            if(stse.end <= rt)
             {
                 delete m_subtitleCache.GetAt(key);
                 m_subtitleCache.SetAt(key, NULL);
@@ -3152,9 +3151,9 @@ HRESULT CRenderedTextSubtitle::ParseScript(REFERENCE_TIME rt, double fps, CSubti
         int entry = subs[i].idx;
         STSEntry stse = m_entries.GetAt(entry);
         {
-            int start = TranslateStart(entry, fps);
-            m_time    = t - start;
-            m_delay   = TranslateEnd(entry, fps) - start;
+            REFERENCE_TIME start = TranslateStart(entry, fps);
+            m_time = (int)RT2MS(rt - start);
+            m_delay = (int)RT2MS(TranslateEnd(entry, fps) - start);
         }
         CSubtitle* s = GetSubtitle(entry);
         if(!s) continue;

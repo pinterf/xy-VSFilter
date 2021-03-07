@@ -27,6 +27,12 @@
 #include "vd.h"
 #include "text.h"
 
+// reference time helpers
+#define MS2RT(t)        (10000i64 * (t))
+#define RT2MS(t)        ((t) / 10000)
+#define UNITS_FLOAT     (10000000.0)
+// double version of UNITS in BaseClasses reftime
+
 #define LCID_NOSUBTITLES -1
 
 extern void DumpStreamConfig(TCHAR* fn, IAMStreamConfig* pAMVSCCap);

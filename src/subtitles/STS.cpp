@@ -33,6 +33,8 @@
 #include <vector>
 #include "xy_logger.h"
 
+#include "..\dsutil\DSUtil.h"
+
 #if ENABLE_XY_LOG_TEXT_SUBTITLE
 #  define TRACE_SUB(msg) XY_LOG_TRACE(msg)
 #else
@@ -578,8 +580,8 @@ static bool OpenSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
             ret.Add(
                 SubRipper2SSA(str, CharSet),
                 file->IsUnicode(),
-                (((hh1 * 60 + mm1) * 60) + ss1) * 1000 + ms1,
-                (((hh2 * 60 + mm2) * 60) + ss2) * 1000 + ms2);
+                MS2RT((((hh1 * 60i64 + mm1) * 60i64) + ss1) * 1000i64 + ms1),
+                MS2RT((((hh2 * 60i64 + mm2) * 60i64) + ss2) * 1000i64 + ms2));
         } else if (c != EOF) { // might be another format
             return false;
         }
@@ -610,8 +612,8 @@ static bool OpenOldSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int Char
             ret.Add(
                 buff.Mid(buff.Find('}', buff.Find('}')+1)+1),
                 file->IsUnicode(),
-                (((hh1*60 + mm1)*60) + ss1)*1000,
-                (((hh2*60 + mm2)*60) + ss2)*1000);
+                MS2RT((((hh1 * 60i64 + mm1) * 60i64) + ss1) * 1000i64),
+                MS2RT((((hh2 * 60i64 + mm2) * 60i64) + ss2) * 1000i64));
         }
         else if(c != EOF) // might be another format
         {
@@ -704,8 +706,8 @@ static bool OpenSubViewer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
 
             ret.Add(str,
                 file->IsUnicode(),
-                (((hh1*60 + mm1)*60) + ss1)*1000 + hs1*10,
-                (((hh2*60 + mm2)*60) + ss2)*1000 + hs2*10);
+                MS2RT((((hh1 * 60i64 + mm1) * 60i64) + ss1) * 1000i64 + hs1 * 10i64),
+                MS2RT((((hh2 * 60i64 + mm2) * 60i64) + ss2) * 1000i64 + hs2 * 10i64));
         }
         else if(c != EOF) // might be another format
         {
@@ -937,14 +939,14 @@ static bool OpenMicroDVD(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
             if(fCheck2 && !ret.IsEmpty())
             {
                 STSEntry& stse = ret.m_entries[ret.m_entries.GetCount()-1];
-                stse.end = min(stse.end, start);
+                stse.end = min(stse.end, MS2RT(start));
                 fCheck2 = false;
             }
 
             ret.Add(
                 MicroDVD2SSA(buff.Mid(buff.Find('}', buff.Find('}')+1)+1), file->IsUnicode(), CharSet),
                 file->IsUnicode(),
-                start, end,
+                MS2RT(start), MS2RT(end),
                 style);
 
             if(fCheck)
@@ -1162,7 +1164,7 @@ static bool OpenSami(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
                 ret.Add(
                     SMI2SSA(caption, CharSet),
                     file->IsUnicode(),
-                    start_time, time);
+                    MS2RT(start_time), MS2RT(time));
 
                 start_time = time;
                 caption.Empty();
@@ -1178,7 +1180,7 @@ static bool OpenSami(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
     ret.Add(
         SMI2SSA(caption, CharSet),
         file->IsUnicode(),
-        start_time, MAXLONG);
+        MS2RT(start_time), LONGLONG_MAX);
 
     return(true);
 }
@@ -1205,8 +1207,8 @@ static bool OpenVPlayer(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
             CStringW str = buff.Mid(buff.Find(':', buff.Find(':', buff.Find(':')+1)+1)+1);
             ret.Add(str,
                 file->IsUnicode(),
-                (((hh*60 + mm)*60) + ss)*1000,
-                (((hh*60 + mm)*60) + ss)*1000 + 1000 + 50*str.GetLength());
+                MS2RT((((hh * 60i64 + mm) * 60i64) + ss) * 1000i64),
+                MS2RT((((hh * 60i64 + mm) * 60i64) + ss) * 1000i64 + 1000i64 + 50i64 * str.GetLength()));
         }
         else if(c != EOF) // might be another format
         {
@@ -1480,8 +1482,8 @@ static bool OpenSubStationAlpha(CTextFile* file, CSimpleTextSubtitle& ret, int C
 
                 ret.AddSTSEntryOnly(buff2,
                     file->IsUnicode(),
-                    (((hh1*60 + mm1)*60) + ss1)*1000 + ms1_div10*10,
-                    (((hh2*60 + mm2)*60) + ss2)*1000 + ms2_div10*10,
+                    MS2RT((((hh1 * 60i64 + mm1) * 60i64) + ss1) * 1000i64 + ms1_div10 * 10i64),
+                    MS2RT((((hh2 * 60i64 + mm2) * 60i64) + ss2) * 1000i64 + ms2_div10 * 10i64),
                     Style, Actor, Effect,
                     marginRect,
                     layer);
@@ -1808,8 +1810,8 @@ static bool OpenXombieSub(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet
 
                 ret.Add(buff,
                     file->IsUnicode(),
-                    (((hh1*60 + mm1)*60) + ss1)*1000 + ms1,
-                    (((hh2*60 + mm2)*60) + ss2)*1000 + ms2,
+                    MS2RT((((hh1 * 60i64 + mm1) * 60i64) + ss1) * 1000i64 + ms1),
+                    MS2RT((((hh2 * 60i64 + mm2) * 60i64) + ss2) * 1000i64 + ms2),
                     Style, Actor, _T(""),
                     marginRect,
                     layer);
@@ -1875,7 +1877,8 @@ static bool OpenMPL2(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
             ret.Add(
                 MPL22SSA(buff.Mid(buff.Find(']', buff.Find(']') + 1) + 1), file->IsUnicode(), CharSet),
                 file->IsUnicode(),
-                start * 100, end * 100);
+                MS2RT(start * 100i64),
+                MS2RT(end * 100i64));
         } else if (c != EOF) { // might be another format
             return false;
         }
@@ -1914,8 +1917,8 @@ static bool OpenRealText(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
         ret.Add(
             SubRipper2SSA(i->second.c_str(), CharSet),
             file->IsUnicode(),
-            i->first.first,
-            i->first.second);
+            MS2RT(i->first.first),
+            MS2RT(i->first.second));
     }
 
     return !ret.IsEmpty();
@@ -2027,12 +2030,12 @@ void CSimpleTextSubtitle::Empty()
     m_entries.RemoveAll();
 }
 
-static bool SegmentCompStart(const STSSegment& segment, int start)
+static bool SegmentCompStart(const STSSegment& segment, REFERENCE_TIME start)
 {
     return (segment.start < start);
 }
 
-void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, int start, int end, 
+void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, REFERENCE_TIME start, REFERENCE_TIME end,
     CString style, const CString& actor, const CString& effect, const CRect& marginRect, int layer, int readorder)
 {
     TRACE_SUB(ReftimeToCString(start)<<" "<<ReftimeToCString(end)<<" "<<str.GetString()<<" style:"<<style.GetString()
@@ -2096,7 +2099,7 @@ void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, int start, int end,
             i++;
         }
 
-        int lastEnd = INT_MAX;
+        REFERENCE_TIME lastEnd = _I64_MAX;
         for (; i < m_segments.GetCount() && m_segments[i].start < end; i++) {
             STSSegment& s = m_segments[i];
 
@@ -2148,7 +2151,7 @@ void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, int start, int end,
     }
 }
 
-void CSimpleTextSubtitle::AddSTSEntryOnly( CStringW str, bool fUnicode, int start, int end, CString style /*= _T("Default")*/, const CString& actor /*= _T("")*/, const CString& effect /*= _T("")*/, const CRect& marginRect /*= CRect(0,0,0,0)*/, int layer /*= 0*/, int readorder /*= -1*/ )
+void CSimpleTextSubtitle::AddSTSEntryOnly( CStringW str, bool fUnicode, REFERENCE_TIME start, REFERENCE_TIME end, CString style /*= _T("Default")*/, const CString& actor /*= _T("")*/, const CString& effect /*= _T("")*/, const CRect& marginRect /*= CRect(0,0,0,0)*/, int layer /*= 0*/, int readorder /*= -1*/ )
 {
     FastTrim(str);
     if (str.IsEmpty() || start > end) return;
@@ -2304,8 +2307,8 @@ void CSimpleTextSubtitle::ConvertToTimeBased(double fps)
     for(int i = 0, j = m_entries.GetCount(); i < j; i++)
     {
         STSEntry& stse = m_entries[i];
-        stse.start = int(1.0 * stse.start * 1000 / fps + 0.5);
-        stse.end = int(1.0 * stse.end * 1000 / fps + 0.5);
+        stse.start = std::llround(stse.start * UNITS_FLOAT / fps);
+        stse.end = std::llround(stse.end * UNITS_FLOAT / fps);
     }
 
     m_mode = TIME;
@@ -2320,8 +2323,8 @@ void CSimpleTextSubtitle::ConvertToFrameBased(double fps)
     for(int i = 0, j = m_entries.GetCount(); i < j; i++)
     {
         STSEntry& stse = m_entries[i];
-        stse.start = int(1.0 * stse.start * fps / 1000 + 0.5);
-        stse.end = int(1.0 * stse.end * fps / 1000 + 0.5);
+        stse.start = std::llround(stse.start * fps / UNITS);
+        stse.end = std::llround(stse.end * fps / UNITS);
     }
 
     m_mode = FRAME;
@@ -2329,7 +2332,7 @@ void CSimpleTextSubtitle::ConvertToFrameBased(double fps)
     CreateSegments();
 }
 
-int CSimpleTextSubtitle::SearchSub(int t, double fps)
+int CSimpleTextSubtitle::SearchSub(REFERENCE_TIME t, double fps) 
 {
     int i = 0, j = m_entries.GetCount() - 1, ret = -1;
 
@@ -2342,7 +2345,7 @@ int CSimpleTextSubtitle::SearchSub(int t, double fps)
     {
         int mid = (i + j) >> 1;
 
-        int midt = TranslateStart(mid, fps);
+        REFERENCE_TIME midt = TranslateStart(mid, fps);
 
         if(t == midt)
         {
@@ -2367,7 +2370,7 @@ int CSimpleTextSubtitle::SearchSub(int t, double fps)
     return(ret);
 }
 
-const STSSegment* CSimpleTextSubtitle::SearchSubs(int t, double fps, /*[out]*/ int* iSegment, int* nSegments)
+const STSSegment* CSimpleTextSubtitle::SearchSubs(REFERENCE_TIME t, double fps, /*[out]*/ int* iSegment, int* nSegments)
 {
     int segmentsCount = m_segments.GetCount();
     int i = 0, j = segmentsCount - 1;
@@ -2396,7 +2399,7 @@ const STSSegment* CSimpleTextSubtitle::SearchSubs(int t, double fps, /*[out]*/ i
     {
         int mid = (i + j) >> 1;
 
-        int midt = TranslateSegmentEnd(mid, fps);
+        REFERENCE_TIME midt = TranslateSegmentEnd(mid, fps);
 
         if(t < midt)
             j=mid;
@@ -2409,11 +2412,11 @@ const STSSegment* CSimpleTextSubtitle::SearchSubs(int t, double fps, /*[out]*/ i
     {
         return &m_segments[j];
     }
-    TRACE_SUB("No subtitles at "<<XY_LOG_VAR_2_STR(t));
+    TRACE_SUB("No subtitles at "<<XY_LOG_VAR_2_STR(RT2MS(t)));
     return(NULL);
 }
 
-STSSegment* CSimpleTextSubtitle::SearchSubs2(int t, double fps, /*[out]*/ int* iSegment, int* nSegments)
+STSSegment* CSimpleTextSubtitle::SearchSubs2(REFERENCE_TIME t, double fps, /*[out]*/ int* iSegment, int* nSegments)
 {
     int segmentsCount = m_segments.GetCount();
     int i = 0, j = segmentsCount - 1;
@@ -2442,7 +2445,7 @@ STSSegment* CSimpleTextSubtitle::SearchSubs2(int t, double fps, /*[out]*/ int* i
     {
         int mid = (i + j) >> 1;
 
-        int midt = TranslateSegmentEnd(mid, fps);
+        REFERENCE_TIME midt = TranslateSegmentEnd(mid, fps);
 
         if(t < midt)
             j=mid;
@@ -2457,43 +2460,43 @@ STSSegment* CSimpleTextSubtitle::SearchSubs2(int t, double fps, /*[out]*/ int* i
     return(NULL);
 }
 
-int CSimpleTextSubtitle::TranslateStart(int i, double fps)
+REFERENCE_TIME CSimpleTextSubtitle::TranslateStart(int i, double fps)
 {
     int n = m_entries.GetCount();
     return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_entries.GetAt(i).start :
-        m_mode == FRAME ? (int)(m_entries.GetAt(i).start*1000/fps) :
+        m_mode == FRAME ? std::llround(m_entries.GetAt(i).start * UNITS_FLOAT / fps) :
         0);
 }
 
-int CSimpleTextSubtitle::TranslateEnd(int i, double fps)
+REFERENCE_TIME CSimpleTextSubtitle::TranslateEnd(int i, double fps)
 {
     int n = m_entries.GetCount();
     return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_entries.GetAt(i).end :
-        m_mode == FRAME ? (int)(m_entries.GetAt(i).end*1000/fps) :
+        m_mode == FRAME ? std::llround(m_entries.GetAt(i).end * UNITS_FLOAT / fps) :
         0);
 }
 
-int CSimpleTextSubtitle::TranslateSegmentStart(int i, double fps)
+REFERENCE_TIME CSimpleTextSubtitle::TranslateSegmentStart(int i, double fps)
 {
     int n = m_segments.GetCount();
     return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_segments[i].start :
-        m_mode == FRAME ? (int)(m_segments[i].start*1000/fps) :
+        m_mode == FRAME ? std::llround(m_segments[i].start * UNITS_FLOAT / fps) :
         0);
 }
 
-int CSimpleTextSubtitle::TranslateSegmentEnd(int i, double fps)
+REFERENCE_TIME CSimpleTextSubtitle::TranslateSegmentEnd(int i, double fps)
 {
     int n = m_segments.GetCount();
     return(i < 0 || n <= i ? -1 :
         m_mode == TIME ? m_segments[i].end :
-        m_mode == FRAME ? (int)(m_segments[i].end*1000/fps) :
+        m_mode == FRAME ? std::llround(m_segments[i].end * UNITS_FLOAT / fps) :
         0);
 }
 
-void CSimpleTextSubtitle::TranslateSegmentStartEnd(int i, double fps, /*out*/int& start, /*out*/int& end)
+void CSimpleTextSubtitle::TranslateSegmentStartEnd(int i, double fps, /*out*/REFERENCE_TIME& start, /*out*/REFERENCE_TIME& end)
 {
     int n = m_segments.GetCount();
     if(i < 0 || n <= i)
@@ -2510,8 +2513,8 @@ void CSimpleTextSubtitle::TranslateSegmentStartEnd(int i, double fps, /*out*/int
         }
         else //m_mode == FRAME
         {
-            start = (int)(m_segments[i].start*1000/fps);
-            end = (int)(m_segments[i].end*1000/fps);
+            start = std::llround(m_segments[i].start * UNITS_FLOAT / fps);
+            end = std::llround(m_segments[i].end * UNITS_FLOAT / fps);
         }
     }
 }
@@ -2613,9 +2616,13 @@ void CSimpleTextSubtitle::SetStr(int i, CStringW str, bool fUnicode)
     else stse.str = str;
 }
 
+template <typename T> int SGN(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 static int comp1(const void* a, const void* b)
 {
-    int ret = ((STSEntry*)a)->start - ((STSEntry*)b)->start;
+    int ret = SGN(((STSEntry*)a)->start - ((STSEntry*)b)->start);
     if(ret == 0) ret = ((STSEntry*)a)->layer - ((STSEntry*)b)->layer;
     if(ret == 0) ret = ((STSEntry*)a)->readorder - ((STSEntry*)b)->readorder;
     return(ret);
@@ -2646,7 +2653,7 @@ void CSimpleTextSubtitle::CreateSegments()
         size_t start, mid, end;
         CAtlArray<STSSegment> tempSegments;//if add to m_segments directly, then remove empty entities can be a
                                            //complex operation when having large segmentCount and lots of empty entities
-        std::vector<int> breakpoints(2*m_entries.GetCount());
+        std::vector<REFERENCE_TIME> breakpoints(2*m_entries.GetCount());
         for(size_t i = 0; i < m_entries.GetCount(); i++)
         {
             STSEntry& stse = m_entries.GetAt(i);
@@ -2656,7 +2663,8 @@ void CSimpleTextSubtitle::CreateSegments()
 
         std::sort(breakpoints.begin(), breakpoints.end());
 
-        int ptr = 1, prev = breakpoints[0];
+        int ptr = 1;
+        REFERENCE_TIME prev = breakpoints[0];
         for(size_t i = breakpoints.size()-1; i > 0; i--, ptr++)
         {
             if(breakpoints[ptr] != prev)
@@ -2951,10 +2959,12 @@ bool CSimpleTextSubtitle::SaveAs(CString fn, exttype et, double fps, CTextFile::
     {
         STSEntry& stse = m_entries.GetAt(i);
 
-        int t1 = TranslateStart(i, fps);
+        const int delay = 0;
+
+        int t1 = (int)(RT2MS(TranslateStart(i, fps)) + delay);
         if(t1 < 0) {k++; continue;}
 
-        int t2 = TranslateEnd(i, fps);
+        int t2 = (int)(RT2MS(TranslateEnd(i, fps)) + delay);
 
         int hh1 = (t1/60/60/1000);
         int mm1 = (t1/60/1000)%60;

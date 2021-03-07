@@ -141,20 +141,20 @@ typedef struct
     CString  style, actor, effect;
     CRect    marginRect;
     int      layer;
-    int      start, end;
+    REFERENCE_TIME start, end;
     int      readorder;
 } STSEntry;
 
 class STSSegment
 {
 public:
-    int start, end;
+    REFERENCE_TIME start, end;
     bool animated; //if this segment has animate effect
     CAtlArray<int> subs;
 
-    STSSegment()                             {animated=false;}
-    STSSegment(int s, int e)                 {start = s; end = e; animated = false;}
-    STSSegment(const STSSegment& stss)       {*this = stss;}
+    STSSegment() {animated=false;}
+    STSSegment(REFERENCE_TIME s, REFERENCE_TIME e) {start = s; end = e; animated = false;}
+    STSSegment(const STSSegment& stss) {*this = stss;}
     void operator = (const STSSegment& stss) {start = stss.start; end = stss.end; animated = stss.animated; subs.Copy(stss.subs);}
 };
 
@@ -229,17 +229,17 @@ public:
     bool Open(BYTE     * data, int len, int CharSet, CString name);
     bool SaveAs(CString fn, exttype et, double fps = -1, CTextFile::enc = CTextFile::DEFAULT_ENCODING);
 
-    void Add(CStringW str, bool fUnicode, int start, int end, CString style = CString(_T("Default")), 
+    void Add(CStringW str, bool fUnicode, REFERENCE_TIME start, REFERENCE_TIME end, CString style = CString(_T("Default")),
         const CString& actor  = CString(_T("")), 
         const CString& effect = CString(_T("")), 
         const CRect& marginRect = CRect(0,0,0,0), int layer = 0, int readorder = -1);
-    //void Add(CStringW str, bool fUnicode, int start, int end, const CString& style, const CString& actor, const CString& effect, const CRect& marginRect, int layer, int readorder);
-    //void Add(CStringW str, bool fUnicode, int start, int end);
+    //void Add(CStringW str, bool fUnicode, REFERENCE_TIME start, REFERENCE_TIME end, const CString& style, const CString& actor, const CString& effect, const CRect& marginRect, int layer, int readorder);
+    //void Add(CStringW str, bool fUnicode, REFERENCE_TIME start, REFERENCE_TIME end);
 
     //add an STSEntry obj to the array
     //NO addition segments added
     //remember to call sort when all STSEntrys are ready
-    void AddSTSEntryOnly(CStringW str, bool fUnicode, int start, int end, CString style = _T("Default"), const CString& actor = _T(""), const CString& effect = _T(""), const CRect& marginRect = CRect(0,0,0,0), int layer = 0, int readorder = -1);
+    void AddSTSEntryOnly(CStringW str, bool fUnicode, REFERENCE_TIME start, REFERENCE_TIME end, CString style = _T("Default"), const CString& actor = _T(""), const CString& effect = _T(""), const CRect& marginRect = CRect(0,0,0,0), int layer = 0, int readorder = -1);
 
     STSStyle* CreateDefaultStyle(int CharSet);
     void ChangeUnknownStylesToDefault();
@@ -253,25 +253,25 @@ public:
     void ConvertToTimeBased (double fps);
     void ConvertToFrameBased(double fps);
 
-    int  TranslateStart(int i, double fps);
-    int  TranslateEnd  (int i, double fps);
-    int  SearchSub     (int t, double fps);
+    REFERENCE_TIME TranslateStart(int i, double fps);
+    REFERENCE_TIME TranslateEnd  (int i, double fps);
+    int SearchSub     (REFERENCE_TIME t, double fps);
 
-    int  TranslateSegmentStart   (int i, double fps);
-    int  TranslateSegmentEnd     (int i, double fps);
-    void TranslateSegmentStartEnd(int i, double fps, /*out*/int& start, /*out*/int& end);
+    REFERENCE_TIME TranslateSegmentStart   (int i, double fps);
+    REFERENCE_TIME TranslateSegmentEnd     (int i, double fps);
+    void TranslateSegmentStartEnd(int i, double fps, /*out*/REFERENCE_TIME& start, /*out*/REFERENCE_TIME& end);
 
     //find the first STSSegment with stop time > @t
     //@iSegment: return the index, 0 based, of the STSSegment found, return STSSegments count if all STSSegments' stop time are NOT bigger than @t
     //@nSegment: return the STSSegments count
     //@return: the ptr to the STSSegment found, return NULL if such STSSegment not exist
-    const STSSegment* SearchSubs(int t, double fps, /*[out]*/ int* iSegment = NULL, int* nSegments = NULL);
+    const STSSegment* SearchSubs(REFERENCE_TIME t, double fps, /*[out]*/ int* iSegment = NULL, int* nSegments = NULL);
 
     //find STSSegment with a duration containing @t, i.e. with a start time <= @t and a stop time > @t
     //@iSegment: return the index, 0 based, of the STSSegment found. Return -1 if such STSSegment not exist
     //@nSegment: return the STSSegments count
     //@return: the ptr to the STSSegment found, return NULL if such STSSegment not exist
-    STSSegment* SearchSubs2(int t, double fps, /*[out]*/ int* iSegment=NULL, int* nSegments=NULL);
+    STSSegment* SearchSubs2(REFERENCE_TIME t, double fps, /*[out]*/ int* iSegment=NULL, int* nSegments=NULL);
 
     const STSSegment* GetSegment(int iSegment) {return iSegment >= 0 && iSegment < (int)m_segments.GetCount() ? &m_segments[iSegment] : NULL;}
 

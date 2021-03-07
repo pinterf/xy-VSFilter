@@ -180,7 +180,7 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
                 }
                 else if(tag == __GAB1_ENTRY__)
                 {
-                    m_pRTS->Add((LPWSTR)CA2WEX<>(ptr), false, *(int*)ptr, *(int*)(ptr+4));
+                    m_pRTS->Add((LPWSTR)CA2WEX<>(ptr), false, MS2RT(*(int*)ptr), MS2RT(*(int*)(ptr+4)));
                 }
                 else if(tag == __GAB1_LANGUAGE_UNICODE__)
                 {
@@ -188,7 +188,7 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
                 }
                 else if(tag == __GAB1_ENTRY_UNICODE__)
                 {
-                    m_pRTS->Add((WCHAR*)(ptr+8), true, *(int*)ptr, *(int*)(ptr+4));
+                    m_pRTS->Add((WCHAR*)(ptr+8), true, MS2RT(*(int*)ptr), MS2RT(*(int*)(ptr+4)));
                 }
 
                 ptr += size;
@@ -225,7 +225,7 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
 
             if(!str.IsEmpty())
             {
-                m_pRTS->Add((LPWSTR)CA2WEX<>(str), false, (int)(tStart / 10000), (int)(tStop / 10000));
+                m_pRTS->Add((LPWSTR)CA2WEX<>(str), false, tStart, tStop);
             }
         }
         else
@@ -240,7 +240,7 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
             CStringW str = UTF8To16(CStringA((LPCSTR)pData, len)).Trim();
             if(!str.IsEmpty())
             {
-                m_pRTS->Add(str, true, (int)(tStart / 10000), (int)(tStop / 10000));
+                m_pRTS->Add(str, true, tStart, tStop);
             }
             else
             {
@@ -274,7 +274,7 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
 
                 if(!stse.str.IsEmpty())
                 {
-                    m_pRTS->Add(stse.str, true, (int)(tStart / 10000), (int)(tStop / 10000), 
+                    m_pRTS->Add(stse.str, true, tStart, tStop, 
                         stse.style, stse.actor, stse.effect, stse.marginRect, stse.layer, stse.readorder);
                 }
             }

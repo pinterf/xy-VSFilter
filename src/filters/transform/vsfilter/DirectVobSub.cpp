@@ -22,8 +22,17 @@
 #include "stdafx.h"
 #include "DirectVobSub.h"
 #include "VSFilter.h"
+#include <numeric>
 
 using namespace DirectVobSubXyOptions;
+
+// greatest common divisor helps normalizing mul/div formulas
+int get_gcd(int a, int b)
+{
+    if (b == 0)
+        return a;
+    return get_gcd(b, a % b);
+}
 
 //////////////////////////////////////////////////////////////////////////
 
@@ -363,6 +372,10 @@ STDMETHODIMP DirectVobSubImpl::put_SubtitleTiming(int delay, int speedmul, int s
     m_SubtitleDelay = delay;
     m_SubtitleSpeedMul = speedmul;
     if(speeddiv > 0) m_SubtitleSpeedDiv = speeddiv;
+
+    int gcd = get_gcd(m_SubtitleSpeedMul, m_SubtitleSpeedDiv);
+    m_SubtitleSpeedNormalizedMul = m_SubtitleSpeedMul / gcd;
+    m_SubtitleSpeedNormalizedDiv = m_SubtitleSpeedDiv / gcd;
 
     return OnOptionChanged(BIN2_SUBTITLE_TIMING);
 }
@@ -1103,6 +1116,10 @@ CDirectVobSub::CDirectVobSub( const Option *options, CCritSec * pLock )
     m_SubtitleDelay = theApp.GetProfileInt(ResStr(IDS_R_TIMING), ResStr(IDS_RTM_SUBTITLEDELAY), 0);
     m_SubtitleSpeedMul = theApp.GetProfileInt(ResStr(IDS_R_TIMING), ResStr(IDS_RTM_SUBTITLESPEEDMUL), 1000);
     m_SubtitleSpeedDiv = theApp.GetProfileInt(ResStr(IDS_R_TIMING), ResStr(IDS_RTM_SUBTITLESPEEDDIV), 1000);
+    int gcd = get_gcd(m_SubtitleSpeedMul, m_SubtitleSpeedDiv);
+    m_SubtitleSpeedNormalizedMul = m_SubtitleSpeedMul / gcd;
+    m_SubtitleSpeedNormalizedDiv = m_SubtitleSpeedDiv / gcd;
+
     m_xy_int_opt[INT_ASPECT_RATIO_SETTINGS] = static_cast<CSimpleTextSubtitle::EPARCompensationType>(theApp.GetProfileInt(ResStr(IDS_R_TEXT), ResStr(IDS_RT_AUTOPARCOMPENSATION), 0));
     m_xy_bool_opt[BOOL_HIDE_TRAY_ICON] =  !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_HIDE_TRAY_ICON), 0);
 
@@ -1510,6 +1527,9 @@ CDVS4XySubFilter::CDVS4XySubFilter( const Option *options, CCritSec * pLock )
     m_SubtitleDelay                         =   theApp.GetProfileInt(ResStr(IDS_R_TIMING), ResStr(IDS_RTM_SUBTITLEDELAY), 0);
     m_SubtitleSpeedMul                      =   theApp.GetProfileInt(ResStr(IDS_R_TIMING), ResStr(IDS_RTM_SUBTITLESPEEDMUL), 1000);
     m_SubtitleSpeedDiv                      =   theApp.GetProfileInt(ResStr(IDS_R_TIMING), ResStr(IDS_RTM_SUBTITLESPEEDDIV), 1000);
+    int gcd = get_gcd(m_SubtitleSpeedMul, m_SubtitleSpeedDiv);
+    m_SubtitleSpeedNormalizedMul = m_SubtitleSpeedMul / gcd;
+    m_SubtitleSpeedNormalizedDiv = m_SubtitleSpeedDiv / gcd;
 
     m_xy_bool_opt[BOOL_HIDE_TRAY_ICON]      = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_HIDE_TRAY_ICON), 0);
 

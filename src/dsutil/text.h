@@ -43,6 +43,26 @@ T Explode(const T& str, CAtlList<T>& sl, SEP sep, size_t limit = 0)
 }
 
 template<class T, typename SEP>
+T ExplodeNoTrim(const T& str, CAtlList<T>& sl, SEP sep, size_t limit = 0)
+{
+    sl.RemoveAll();
+
+    for (int i = 0, j = 0; ; i = j + 1) {
+        j = str.Find(sep, i);
+
+        if (j < 0 || sl.GetCount() == limit - 1) {
+            sl.AddTail(str.Mid(i));
+            break;
+        }
+        else {
+            sl.AddTail(str.Mid(i, j - i));
+        }
+    }
+
+    return sl.GetHead();
+}
+
+template<class T, typename SEP>
 T ExplodeMin(const T& str, CAtlList<T>& sl, SEP sep, size_t limit = 0)
 {
     Explode(str, sl, sep, limit);

@@ -257,19 +257,19 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
                 int fields = m_mt.subtype == MEDIASUBTYPE_ASS2 ? 10 : 9;
 
                 CAtlList<CStringW> sl;
-                Explode(str, sl, ',', fields);
+                ExplodeNoTrim(str, sl, ',', fields);
                 if(sl.GetCount() == fields)
                 {
                     stse.readorder = wcstol(sl.RemoveHead(), NULL, 10);
                     stse.layer = wcstol(sl.RemoveHead(), NULL, 10);
-                    stse.style = sl.RemoveHead();
-                    stse.actor = sl.RemoveHead();
+                    stse.style = sl.RemoveHead(); // no trim, its value is a lookup key
+                    stse.actor = sl.RemoveHead().Trim();
                     stse.marginRect.left = wcstol(sl.RemoveHead(), NULL, 10);
                     stse.marginRect.right = wcstol(sl.RemoveHead(), NULL, 10);
                     stse.marginRect.top = stse.marginRect.bottom = wcstol(sl.RemoveHead(), NULL, 10);
                     if(fields == 10) stse.marginRect.bottom = wcstol(sl.RemoveHead(), NULL, 10);
-                    stse.effect = sl.RemoveHead();
-                    stse.str = sl.RemoveHead();
+                    stse.effect = sl.RemoveHead().Trim();
+                    stse.str = sl.RemoveHead().Trim();
                 }
 
                 if(!stse.str.IsEmpty())

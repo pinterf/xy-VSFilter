@@ -32,6 +32,7 @@
 #include <algorithm>
 #include <vector>
 #include "xy_logger.h"
+#include <regex>
 
 #include "..\dsutil\DSUtil.h"
 
@@ -202,6 +203,19 @@ CHtmlColorMap::CHtmlColorMap()
 }
 
 CHtmlColorMap g_colors;
+
+static CStringW SSAColorTag(CStringW arg, CStringW ctag = L"c") {
+    DWORD val, color;
+    if (g_colors.Lookup(CString(arg), val)) {
+        color = (DWORD)val;
+    }
+    else if ((color = wcstol(arg, nullptr, 16)) == 0) {
+        color = 0x00ffffff;    // default is white
+    }
+    CStringW tmp;
+    tmp.Format(L"%02x%02x%02x", color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff);
+    return CStringW(L"{\\" + ctag + L"&H") + tmp + L"&}";
+}
 
 CString g_default_style(_T("Default"));
 
@@ -523,6 +537,162 @@ static CStringW SubRipper2SSA(CStringW str, int CharSet)
 
     return(str);
 }
+
+static void WebVTTCueStrip(CStringW& str)
+{
+    int p = str.Find(L'\n');
+    if (p > 0) {
+        if (str.Left(6) == _T("align:") || str.Left(9) == _T("position:") || str.Left(9) == _T("vertical:") || str.Left(5) == _T("line:") || str.Left(5) == _T("size:")) {
+            str.Delete(0, p);
+            str.TrimLeft();
+        }
+    }
+}
+
+static void WebVTT2SSA(CStringW& str, CStringW& cueTags)
+{
+    if (str.Find(L'<') >= 0) {
+        str.Replace(L"<i>", L"{\\i1}");
+        str.Replace(L"</i>", L"{\\i}");
+        str.Replace(L"<b>", L"{\\b1}");
+        str.Replace(L"</b>", L"{\\b}");
+        str.Replace(L"<u>", L"{\\u1}");
+        str.Replace(L"</u>", L"{\\u}");
+    }
+    if (str.Find(L'<') >= 0) {
+        CW2CW pszConvertedAnsiString(str);
+        std::wstring stdTmp(pszConvertedAnsiString);
+        std::wregex clrrgx(LR"(<c\.([a-z]*)\.bg_([a-z]*)>([^<]*)</c[\.\w\d]*>)");
+        std::wregex clrrgx2(LR"(<c\.([a-z]*)>([^<]*)</c[\.\w\d]*>)");
+        std::wsmatch match;
+
+        if (std::regex_search(stdTmp, match, clrrgx)) {
+            std::wstring clr = match[1];
+            std::wstring bgclr = match[2];
+            std::wstring text = match[3];
+            CStringW ssaClrTag = SSAColorTag(clr.c_str());
+            CStringW ssaBGClrTag = SSAColorTag(bgclr.c_str(), L"3c");
+            stdTmp = ssaClrTag + ssaBGClrTag + text.c_str();
+        } else if (std::regex_search(stdTmp, match, clrrgx2)) {
+            std::wstring clr = match[1];
+            std::wstring text = match[2];
+            CStringW ssaClrTag = SSAColorTag(clr.c_str());
+            stdTmp = ssaClrTag + text.c_str();
+        }
+
+        // remove tags we don't support
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"<c[.\\w\\d]*>"), L"");
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"</c[.\\w\\d]*>"), L"");
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"<\\d\\d:\\d\\d:\\d\\d.\\d\\d\\d>"), L"");
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"<v[ .][^>]*>"), L"");
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"</v>"), L"");
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"<lang[^>]*>"), L"");
+        stdTmp = std::regex_replace(stdTmp, std::wregex(L"</lang>"), L"");
+        str = stdTmp.c_str();
+    }
+    if (str.Find(L'&') >= 0) {
+        str.Replace(L"&lt;", L"<");
+        str.Replace(L"&gt;", L">");
+        str.Replace(L"&nbsp;", L"\\h");
+        str.Replace(L"&lrm;", L"");
+        str.Replace(L"&rlm;", L"");
+        str.Replace(L"&amp;", L"&");
+    }
+
+    if (!cueTags.IsEmpty()) {
+        CW2CW pszConvertedAnsiString(cueTags);
+        std::wstring stdTmp(pszConvertedAnsiString);
+        std::wregex alignRegex(L"align:(start|left|center|middle|end|right)");
+        std::wsmatch match;
+
+        if (std::regex_search(stdTmp, match, alignRegex)) {
+            if (match[1] == L"start" || match[1] == L"left") {
+                str = L"{\\an1}" + str;
+            } else if (match[1] == L"center" || match[1] == L"middle") {
+                str = L"{\\an2}" + str;
+            } else {
+                str = L"{\\an3}" + str;
+            }
+        }
+    }
+}
+
+static void WebVTT2SSA(CStringW& str) {
+    CStringW discard;
+    WebVTT2SSA(str, discard);
+}
+
+static bool OpenVTT(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet) {
+    CStringW buff, start, end, cueTags;
+
+    file->ReadString(buff);
+    if (buff.Left(6).Compare(L"WEBVTT") != 0) {
+        return false;
+    }
+
+    auto readTimeCode = [](LPCWSTR str, int& hh, int& mm, int& ss, int& ms) {
+        WCHAR sep;
+        int c = swscanf_s(str, L"%d%c%d%c%d%c%d",
+            &hh, &sep, 1, &mm, &sep, 1, &ss, &sep, 1, &ms);
+        if (c == 5) {
+            // Hours value is absent, shift read values
+            ms = ss;
+            ss = mm;
+            mm = hh;
+            hh = 0;
+        }
+        return (c == 5 || c == 7);
+    };
+
+
+    CStringW lastStr, lastBuff;
+    while (file->ReadString(buff)) {
+        FastTrimRight(buff);
+        if (buff.IsEmpty()) {
+            continue;
+        }
+        int len = buff.GetLength();
+        cueTags = L"";
+        int c = swscanf_s(buff, L"%s --> %s %[^\n]s", start.GetBuffer(len), len, end.GetBuffer(len), len, cueTags.GetBuffer(len), len);
+        start.ReleaseBuffer();
+        end.ReleaseBuffer();
+        cueTags.ReleaseBuffer();
+
+        int hh1, mm1, ss1, ms1, hh2, mm2, ss2, ms2;
+
+        //very lazy: if we found a cue we will process it.  everything else gets skipped for now
+        if ((c == 2 || c == 3) //either start/end or start/end/cuetags
+            && readTimeCode(start, hh1, mm1, ss1, ms1)
+            && readTimeCode(end, hh2, mm2, ss2, ms2)) {
+
+            CStringW str, tmp;
+
+            while (file->ReadString(tmp)) {
+                FastTrimRight(tmp);
+                if (tmp.IsEmpty()) {
+                    break;
+                }
+                WebVTT2SSA(tmp, cueTags);
+                str += tmp + '\n';
+            }
+
+            if (lastStr != str || lastBuff != buff) { //discard repeated subs
+                ret.Add(str,
+                    file->IsUnicode(),
+                    MS2RT((((hh1 * 60i64 + mm1) * 60i64) + ss1) * 1000i64 + ms1),
+                    MS2RT((((hh2 * 60i64 + mm2) * 60i64) + ss2) * 1000i64 + ms2));
+            }
+
+            lastStr = str;
+            lastBuff = buff;
+        } else {
+            continue;
+        }
+    }
+
+    return !ret.IsEmpty();
+}
+
 
 static bool OpenSubRipper(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
 {
@@ -1926,21 +2096,26 @@ static bool OpenRealText(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet)
 
 typedef bool (*STSOpenFunct)(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet);
 
-typedef struct {STSOpenFunct open; tmode mode;} OpenFunctStruct;
+struct OpenFunctStruct {
+    STSOpenFunct open;
+    tmode mode;
+    exttype type;
+};
 
 static OpenFunctStruct OpenFuncts[] =
 {
-    OpenSubStationAlpha, TIME,
-    OpenSubRipper      , TIME,
-    OpenOldSubRipper   , TIME,
-    OpenSubViewer      , TIME,
-    OpenMicroDVD       , FRAME,
-    OpenSami           , TIME,
-    OpenVPlayer        , TIME,
-    OpenXombieSub      , TIME,
-    OpenUSF            , TIME,
-    OpenMPL2           , TIME,
-    OpenRealText       , TIME,
+    OpenSubStationAlpha, TIME, EXTSSA,
+    OpenSubRipper      , TIME, EXTSRT,
+    OpenOldSubRipper   , TIME, EXTSRT,
+    OpenSubViewer      , TIME, EXTSUB,
+    OpenMicroDVD       , FRAME, EXTSSA,
+    OpenSami           , TIME, EXTSMI,
+    OpenVTT            , TIME, EXTVTT,
+    OpenVPlayer        , TIME, EXTSRT,
+    OpenXombieSub      , TIME, EXTXSS,
+    OpenUSF            , TIME, EXTUSF,
+    OpenMPL2           , TIME, EXTSRT,
+    OpenRealText       , TIME, EXTRT,
 };
 
 static int nOpenFuncts = countof(OpenFuncts);
@@ -1949,6 +2124,7 @@ static int nOpenFuncts = countof(OpenFuncts);
 
 CSimpleTextSubtitle::CSimpleTextSubtitle()
 {
+    m_subtitleType         = EXTSRT;
     m_mode                 = TIME;
     m_dstScreenSize        = CSize(0, 0);
     m_defaultWrapStyle     = 0;
@@ -1974,6 +2150,7 @@ void CSimpleTextSubtitle::Copy(CSimpleTextSubtitle& sts)
 
     m_name                         = sts.m_name;
     m_mode                         = sts.m_mode;
+    m_subtitleType                 = sts.m_subtitleType;
     m_dstScreenSize                = sts.m_dstScreenSize;
     m_defaultWrapStyle             = sts.m_defaultWrapStyle;
     m_collisions                   = sts.m_collisions;
@@ -2047,6 +2224,11 @@ void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, REFERENCE_TIME start,
 
     FastTrim(str);
     if (str.IsEmpty() || start > end) return;
+    if (m_subtitleType == EXTVTT) {
+        WebVTTCueStrip(str);
+        WebVTT2SSA(str);
+        if (str.IsEmpty()) return;
+    }
 
     str.Remove('\r');
     str.Replace(L"\n", L"\\N");
@@ -2067,13 +2249,16 @@ void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, REFERENCE_TIME start,
     sub.start      = start;
     sub.end        = end;
     sub.readorder  = readorder < 0 ? (int)m_entries.GetCount() : readorder;
-    int n = (int)m_entries.Add(sub);
+
+    int n = (int)m_entries.GetCount();
 
     if (start == end) return;
 
     size_t segmentsCount = m_segments.GetCount();
 
     if (segmentsCount == 0) { // First segment
+        n = (int)m_entries.Add(sub);
+
         STSSegment stss(start, end);
         stss.subs.Add(n);
         m_segments.Add(stss);
@@ -2081,6 +2266,14 @@ void CSimpleTextSubtitle::Add(CStringW str, bool fUnicode, REFERENCE_TIME start,
         STSSegment* segmentsStart = m_segments.GetData();
         STSSegment* segmentsEnd   = segmentsStart + segmentsCount;
         STSSegment* segment = std::lower_bound(segmentsStart, segmentsEnd, start, SegmentCompStart);
+
+        if (m_subtitleType == EXTVTT && start == segment->start && end == segment->end) {
+            // ToDo: compare new sub with existing one to verify if it is really a duplicate
+            //TRACE(_T("Dropping duplicate WebVTT sub (n=%d)\n"), n);
+            return;
+        }
+
+        n = (int)m_entries.Add(sub);
 
         size_t i = segment - segmentsStart;
         if (i > 0 && m_segments[i - 1].end > start) {
@@ -2745,6 +2938,7 @@ bool CSimpleTextSubtitle::Open(CTextFile* f, int CharSet, CString name)
              TEXT("OpenSubViewer"),
              TEXT("OpenMicroDVD"),
              TEXT("OpenSami"),
+             TEXT("OpenVTT"),
              TEXT("OpenVPlayer"),
              TEXT("OpenXombieSub"),
              TEXT("OpenUSF"),
@@ -2771,6 +2965,7 @@ bool CSimpleTextSubtitle::Open(CTextFile* f, int CharSet, CString name)
         XY_LOG_INFO("Open '"<<f->GetFilePath().GetString()<<"' with "<<func_name[i]<<" succeeded" );
 
         m_name = name;
+        m_subtitleType = OpenFuncts[i].type;
         m_mode = OpenFuncts[i].mode;
         m_encoding = f->GetEncoding();
         m_path = f->GetFilePath();

@@ -144,8 +144,13 @@ CTextSubtitleInputPinHepler::CTextSubtitleInputPinHepler( CRenderedTextSubtitle 
 
 STDMETHODIMP CTextSubtitleInputPinHepler::NewSegment( REFERENCE_TIME tStart, REFERENCE_TIME tStop, double dRate )
 {
-    m_pRTS->RemoveAllEntries();
-    m_pRTS->CreateSegments();
+    if (m_mt.subtype != MEDIASUBTYPE_WEBVTT) {
+      // WebVTT can be read as one big blob of data during pin connection, instead of as samples during playback.
+      // This depends on how it is being demuxed. So both situations need to be handled.
+      // Don't remove existing data in case of WebVTT. Instead we check for duplicates in CSimpleTextSubtitle::Add()
+      m_pRTS->RemoveAllEntries();
+      m_pRTS->CreateSegments();
+    }
     return __super::NewSegment(tStart,tStop,dRate);
 }
 
@@ -235,24 +240,10 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
     }
     else if(m_mt.majortype == MEDIATYPE_Subtitle)
     {
-        if(m_mt.subtype == MEDIASUBTYPE_UTF8)
+        if(m_mt.subtype == MEDIASUBTYPE_UTF8 || m_mt.subtype == MEDIASUBTYPE_WEBVTT)
         {
             CStringW str = UTF8To16(CStringA((LPCSTR)pData, len)).Trim();
             if(!str.IsEmpty())
-            {
-                m_pRTS->Add(str, true, tStart, tStop);
-            }
-            else
-            {
-                XY_LOG_WARN("Empty data");
-            }
-        }
-        else if (m_mt.subtype == MEDIASUBTYPE_WEBVTT)
-        {
-            // just a bit more than nothing, similar to plain UTF8
-            CStringW str = UTF8To16(CStringA((LPCSTR)pData, len)).Trim();
-            // https://w3c.github.io/webvtt/#webvtt-cue-class-span
-            if (!str.IsEmpty())
             {
                 m_pRTS->Add(str, true, tStart, tStop);
             }
@@ -523,6 +514,10 @@ STDMETHODIMP_(CSubtitleInputPinHelper*) CSubtitleInputPin::CreateHelper( const C
             pRTS->m_name = name;
             pRTS->m_lcid = lcid;
             pRTS->m_dstScreenSize = CSize(384, 288);
+
+            if (m_mt.subtype == MEDIASUBTYPE_WEBVTT) {
+                pRTS->m_subtitleType = EXTVTT;
+            }
 
             if(dwOffset > 0 && mt.cbFormat - dwOffset > 0)
             {

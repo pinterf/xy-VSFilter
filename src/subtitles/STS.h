@@ -171,6 +171,7 @@ public:
     bool           m_simple;
     CString        m_name;
     LCID           m_lcid;
+    exttype        m_subtitleType;
     tmode          m_mode;
     CTextFile::enc m_encoding;
     CString        m_path;

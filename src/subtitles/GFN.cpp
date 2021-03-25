@@ -25,11 +25,13 @@
 #include "GFN.h"
 #include "xy_logger.h"
 
+// note: match with enum 'exttype'
 TCHAR* G_EXTTYPESTR[] = 
 {
     _T("srt"), _T("sub"), _T("smi"), _T("psb"), 
     _T("ssa"), _T("ass"), _T("idx"), _T("usf"), 
-    _T("xss"), _T("txt"), _T("ssf"), _T("rt"), _T("sup")
+    _T("xss"), _T("txt"), _T("ssf"), _T("rt"), _T("sup"),
+    _T("vtt")
 };
 
 #define WEBSUBEXT _T(".wse")

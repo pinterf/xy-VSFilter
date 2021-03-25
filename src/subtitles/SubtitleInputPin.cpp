@@ -247,6 +247,20 @@ STDMETHODIMP CTextSubtitleInputPinHepler::Receive( IMediaSample* pSample )
                 XY_LOG_WARN("Empty data");
             }
         }
+        else if (m_mt.subtype == MEDIASUBTYPE_WEBVTT)
+        {
+            // just a bit more than nothing, similar to plain UTF8
+            CStringW str = UTF8To16(CStringA((LPCSTR)pData, len)).Trim();
+            // https://w3c.github.io/webvtt/#webvtt-cue-class-span
+            if (!str.IsEmpty())
+            {
+                m_pRTS->Add(str, true, tStart, tStop);
+            }
+            else
+            {
+                XY_LOG_WARN("Empty data");
+            }
+        }
         else if(m_mt.subtype == MEDIASUBTYPE_SSA || m_mt.subtype == MEDIASUBTYPE_ASS || m_mt.subtype == MEDIASUBTYPE_ASS2)
         {
             CStringW str = UTF8To16(CStringA((LPCSTR)pData, len)).Trim();
@@ -430,6 +444,7 @@ HRESULT CSubtitleInputPin::CheckMediaType(const CMediaType* pmt)
         || pmt->majortype == MEDIATYPE_Subtitle && (pmt->subtype == MEDIASUBTYPE_SSA || pmt->subtype == MEDIASUBTYPE_ASS || pmt->subtype == MEDIASUBTYPE_ASS2)
         || pmt->majortype == MEDIATYPE_Subtitle && pmt->subtype == MEDIASUBTYPE_SSF
         || pmt->majortype == MEDIATYPE_Subtitle && (pmt->subtype == MEDIASUBTYPE_VOBSUB)
+        || pmt->majortype == MEDIATYPE_Subtitle && pmt->subtype == MEDIASUBTYPE_WEBVTT
         || IsHdmvSub(pmt)
         ? S_OK 
         : E_FAIL;
@@ -497,9 +512,11 @@ STDMETHODIMP_(CSubtitleInputPinHelper*) CSubtitleInputPin::CreateHelper( const C
 
         if(mt.subtype == MEDIASUBTYPE_UTF8 
             /*|| m_mt.subtype == MEDIASUBTYPE_USF*/
-            || mt.subtype == MEDIASUBTYPE_SSA 
+            || mt.subtype == MEDIASUBTYPE_WEBVTT
+            || mt.subtype == MEDIASUBTYPE_SSA
             || mt.subtype == MEDIASUBTYPE_ASS 
-            || mt.subtype == MEDIASUBTYPE_ASS2)
+            || mt.subtype == MEDIASUBTYPE_ASS2
+            )
         {
             XY_LOG_INFO("Create CTextSubtitleInputPinHepler");
             CRenderedTextSubtitle* pRTS = DEBUG_NEW CRenderedTextSubtitle(m_pSubLock);

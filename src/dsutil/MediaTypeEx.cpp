@@ -331,7 +331,10 @@ CString CMediaTypeEx::GetSubtitleCodecName(const GUID& subtype)
 		names[MEDIASUBTYPE_SSF] = _T("Stuctured Subtitle Format");
 		names[MEDIASUBTYPE_USF] = _T("Universal Subtitle Format");
 		names[MEDIASUBTYPE_VOBSUB] = _T("VobSub");
-		// names[''] = _T("");
+        names[MEDIASUBTYPE_HDMVSUB] = _T("HDMVSUB");
+        names[MEDIASUBTYPE_DVB_SUBTITLES] = _T("DVB Subtitles");
+        names[MEDIASUBTYPE_WEBVTT] = _T("WebVTT");
+        // names[''] = _T("");
 	}
 
 	if(names.Lookup(subtype, str))

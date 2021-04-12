@@ -702,25 +702,14 @@ static void WebVTT2SSA(CStringW& str, CStringW& cueTags, WebVTTcolorMap clrMap)
         applyStyle(clr, bg, -1);
     }
 
-    // Do elimination before color parsing, which expects no further tags inside
-    // e.g. in "<c.colorFE4D9A><b>T</b></c><c.color000000><b>u</b></c>"
-    if (str.Find(L'<') >= 0) {
-        str.Replace(L"<i>", L"{\\i1}");
-        str.Replace(L"</i>", L"{\\i}");
-        str.Replace(L"<b>", L"{\\b1}");
-        str.Replace(L"</b>", L"{\\b}");
-        str.Replace(L"<u>", L"{\\u1}");
-        str.Replace(L"</u>", L"{\\u}");
-    }
-
-    // <c. color style handling
     int tagPos = str.Find(L"<");
     while (tagPos != std::wstring::npos) {
         int endTag = str.Find(L">", tagPos);
         if (endTag == std::wstring::npos) break;
+        int dotPos = str.Find(L".", tagPos);
         CStringW inner = str.Mid(tagPos + 1, endTag - tagPos - 1);
         if (inner.Find(L"/") == 0) { //close tag
-            tagPos = str.Find(L">", endTag);
+            tagPos = str.Find(L"<", endTag);
             if (styleStack.size() > 0) {//should always be true, unless poorly matched close tags in source
                 styleStack.pop_back();
             }
@@ -738,8 +727,6 @@ static void WebVTT2SSA(CStringW& str, CStringW& cueTags, WebVTTcolorMap clrMap)
             continue;
         }
 
-        int dotPos = inner.Find(L".", tagPos);
-        // dot posision is valid only when found before the end tag
         if (dotPos == std::wstring::npos) {//it's a simple tag, so we can apply a single style to it, if it exists
             if (clrMap.count(inner.GetString())) {
                 WebVTTcolorData colorData = clrMap[inner.GetString()];
@@ -777,6 +764,14 @@ static void WebVTT2SSA(CStringW& str, CStringW& cueTags, WebVTTcolorMap clrMap)
         tagPos = str.Find(L"<", endTag);
     }
 
+    if (str.Find(L'<') >= 0) {
+        str.Replace(L"<i>", L"{\\i1}");
+        str.Replace(L"</i>", L"{\\i}");
+        str.Replace(L"<b>", L"{\\b1}");
+        str.Replace(L"</b>", L"{\\b}");
+        str.Replace(L"<u>", L"{\\u1}");
+        str.Replace(L"</u>", L"{\\u}");
+    }
     if (str.Find(L'<') >= 0) {
         std::wstring stdTmp(str);
 

@@ -1,4 +1,4 @@
-# xy-VSFilter (pfmod) v3.2.0.805 (20210412)
+# xy-VSFilter (pfmod) v3.2.0.806 (20210412)
 https://github.com/pinterf/xy-VSFilter/
 
 Active branch: xy_sub_filter_rc5
@@ -30,7 +30,11 @@ Plus:
   After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
 
 # Change log:
-## v3.2.0.805 (20210412 - pinterf)
+## v3.2.0.806 (20210412)
+
+* proper WebVTT support fixes by adipose/MPC-HC
+
+## v3.2.0.805 (20210412)
 
 * WebVTT support, embedded subtitles as well.
   99% of it extracted from MPC-HC https://github.com/clsid2/mpc-hc, thanks to MPC-HC developers.
@@ -49,7 +53,7 @@ Plus:
   https://github.com/Cyberbeing/xy-VSFilter/tree/xy_sub_filter_rc5
 * upstream:
   * (cyberbeing) Revert MPC-HC Tag Cache, restore xy Tag Cache
-   
+  
    Fixes a significant performance regression on certain SSA/ASS samples.
   * (jesec) subtitles, subpic: enable SSE2 unconditionally
      Target OS (10.0) required users to have SSE2

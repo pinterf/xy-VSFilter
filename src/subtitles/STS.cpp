@@ -36,6 +36,114 @@
 
 #include "..\dsutil\DSUtil.h"
 
+// WebVTT helper RegexUtil from mpc-hc
+
+namespace RegexUtil { //taken from SubtitlesProvidersUtils and extended for wstring
+    static constexpr std::regex::flag_type RegexFlags(std::regex_constants::ECMAScript | std::regex_constants::icase | std::regex_constants::optimize);
+    static constexpr std::wregex::flag_type WRegexFlags(std::regex_constants::ECMAScript | std::regex_constants::icase | std::regex_constants::optimize);
+
+    using wregexResult = std::vector<std::wstring>;
+    using wregexResults = std::vector<wregexResult>;
+
+    size_t wstringMatch(const std::wstring& pattern, const std::wstring& text, wregexResults& results);
+    size_t wstringMatch(const std::wstring& pattern, const std::wstring& text, wregexResult& result);
+    size_t wstringMatch(const std::wregex& pattern, const std::wstring& text, wregexResults& results);
+    size_t wstringMatch(const std::wregex& pattern, const std::wstring& text, wregexResult& result);
+
+    using regexResult = std::vector<std::string>;
+    using regexResults = std::vector<regexResult>;
+
+    size_t stringMatch(const std::string& pattern, const std::string& text, regexResults& results);
+    size_t stringMatch(const std::string& pattern, const std::string& text, regexResult& result);
+    size_t stringMatch(const std::regex& pattern, const std::string& text, regexResults& results);
+    size_t stringMatch(const std::regex& pattern, const std::string& text, regexResult& result);
+
+};
+
+size_t RegexUtil::stringMatch(const std::string& pattern, const std::string& text, regexResults& results) {
+    std::regex regex_pattern(pattern, RegexFlags);
+    return stringMatch(regex_pattern, text, results);
+}
+
+size_t RegexUtil::stringMatch(const std::regex& pattern, const std::string& text, regexResults& results) {
+    results.clear();
+
+    std::string data(text);
+    std::smatch match_pieces;
+    while (std::regex_search(data, match_pieces, pattern)) {
+        regexResult result;
+        for (auto match = match_pieces.begin(); match != match_pieces.end(); ++match) {
+            if (match != match_pieces.begin()) {
+                result.push_back((*match).str());
+            }
+        }
+        results.push_back(result);
+        data = match_pieces.suffix().str();
+    }
+    return results.size();
+}
+
+size_t RegexUtil::stringMatch(const std::string& pattern, const std::string& text, regexResult& result) {
+    std::regex regex_pattern(pattern, RegexFlags);
+    return stringMatch(regex_pattern, text, result);
+}
+
+size_t RegexUtil::stringMatch(const std::regex& pattern, const std::string& text, regexResult& result) {
+    result.clear();
+
+    std::smatch match_pieces;
+    std::regex_search(text, match_pieces, pattern);
+    for (const auto& match : match_pieces) {
+        if (match != *match_pieces.begin()) {
+            result.push_back(match.str());
+        }
+    }
+    return result.size();
+}
+
+size_t RegexUtil::wstringMatch(const std::wstring& pattern, const std::wstring& text, wregexResults& results) {
+    std::wregex regex_pattern(pattern, WRegexFlags);
+    return wstringMatch(regex_pattern, text, results);
+}
+
+size_t RegexUtil::wstringMatch(const std::wregex& pattern, const std::wstring& text, wregexResults& results) {
+    results.clear();
+
+    std::wstring data(text);
+    std::wsmatch match_pieces;
+    while (std::regex_search(data, match_pieces, pattern)) {
+        wregexResult result;
+        for (auto match = match_pieces.begin(); match != match_pieces.end(); ++match) {
+            if (match != match_pieces.begin()) {
+                result.push_back((*match).str());
+            }
+        }
+        results.push_back(result);
+        data = match_pieces.suffix().str();
+    }
+    return results.size();
+}
+
+size_t RegexUtil::wstringMatch(const std::wstring& pattern, const std::wstring& text, wregexResult& result) {
+    std::wregex regex_pattern(pattern, RegexFlags);
+    return wstringMatch(regex_pattern, text, result);
+}
+
+size_t RegexUtil::wstringMatch(const std::wregex& pattern, const std::wstring& text, wregexResult& result) {
+    result.clear();
+
+    std::wsmatch match_pieces;
+    std::regex_search(text, match_pieces, pattern);
+    for (const auto& match : match_pieces) {
+        if (match != *match_pieces.begin()) {
+            result.push_back(match.str());
+        }
+    }
+    return result.size();
+}
+
+// RegexUtil end
+
 #if ENABLE_XY_LOG_TEXT_SUBTITLE
 #  define TRACE_SUB(msg) XY_LOG_TRACE(msg)
 #else
@@ -215,6 +323,11 @@ static CStringW SSAColorTag(CStringW arg, CStringW ctag = L"c") {
     CStringW tmp;
     tmp.Format(L"%02x%02x%02x", color & 0xff, (color >> 8) & 0xff, (color >> 16) & 0xff);
     return CStringW(L"{\\" + ctag + L"&H") + tmp + L"&}";
+}
+
+static std::wstring SSAColorTagCS(std::wstring arg, CStringW ctag = L"c") {
+    CStringW _arg(arg.c_str());
+    return SSAColorTag(_arg, ctag).GetString();
 }
 
 CString g_default_style(_T("Default"));
@@ -549,8 +662,108 @@ static void WebVTTCueStrip(CStringW& str)
     }
 }
 
-static void WebVTT2SSA(CStringW& str, CStringW& cueTags)
+using WebVTTcolorData = struct _WebVTTcolorData { std::wstring color; std::wstring bg; };
+using WebVTTcolorMap = std::map<std::wstring, WebVTTcolorData>;
+
+static void WebVTT2SSA(CStringW& str, CStringW& cueTags, WebVTTcolorMap clrMap)
 {
+
+    std::vector<WebVTTcolorData> styleStack;
+    auto applyStyle = [&styleStack, &str](std::wstring clr, std::wstring bg, int endTag, bool restoring = false) {
+        std::wstring tags = L"";
+        WebVTTcolorData previous;
+        if (styleStack.size() > 0 && !restoring) {
+            previous = styleStack.back();
+        }
+        if (clr != L"" && clr != previous.color) {
+            tags += SSAColorTagCS(clr);
+        }
+        if (bg != L"" && bg != previous.bg) {
+            tags += SSAColorTagCS(bg, L"3c");
+        }
+        if (tags.length() > 0) {
+            if (-1 == endTag) {
+                str = tags.c_str() + str;
+            }
+            else if (str.Mid(endTag + 1, 1) != "<") { //if we are about to open or close a tag, don't set the style yet, as it may change before formattable text arrives
+                str = str.Left(endTag + 1) + tags.c_str() + str.Mid(endTag + 1);
+            }
+        }
+        if (!restoring) {
+            styleStack.push_back({ clr, bg }); //push current colors for restoring
+        }
+    };
+
+    std::wstring clr = L"", bg = L"";
+    if (clrMap.count(L"::cue")) { //default cue style
+        WebVTTcolorData colorData = clrMap[L"::cue"];
+        clr = colorData.color;
+        bg = colorData.bg;
+        applyStyle(clr, bg, -1);
+    }
+
+    int tagPos = str.Find(L"<");
+    while (tagPos != std::wstring::npos) {
+        int endTag = str.Find(L">", tagPos);
+        if (endTag == std::wstring::npos) break;
+        int dotPos = str.Find(L".", tagPos);
+        CStringW inner = str.Mid(tagPos + 1, endTag - tagPos - 1);
+        if (inner.Find(L"/") == 0) { //close tag
+            tagPos = str.Find(L"<", endTag);
+            if (styleStack.size() > 0) {//should always be true, unless poorly matched close tags in source
+                styleStack.pop_back();
+            }
+            if (styleStack.size() > 0) {
+                auto restoreStyle = styleStack[styleStack.size() - 1];
+                clr = restoreStyle.color;
+                bg = restoreStyle.bg;
+                applyStyle(clr, bg, endTag, true);
+            }
+            else { //reset default style
+                str = str.Left(endTag + 1) + L"{\\r}" + str.Mid(endTag + 1);
+                clr = L"";
+                bg = L"";
+            }
+            continue;
+        }
+
+        if (dotPos == std::wstring::npos) {//it's a simple tag, so we can apply a single style to it, if it exists
+            if (clrMap.count(inner.GetString())) {
+                WebVTTcolorData colorData = clrMap[inner.GetString()];
+                clr = colorData.color;
+                bg = colorData.bg;
+            }
+        }
+        else { //could find multiple classes 
+            RegexUtil::wregexResults results;
+            std::wregex clsPattern(LR"((\.?[^\.]+))");
+            RegexUtil::wstringMatch(clsPattern, (const wchar_t*)inner, results);
+            if (results.size() > 1) {
+                std::wstring type = results[0][0];
+
+                for (auto iter = results.begin() + 1; iter != results.end(); ++iter) { //loop through all classes--whichever is last gets precedence
+                    std::wstring cls = (*iter)[0];
+                    WebVTTcolorData colorData;
+                    if (clrMap.count(type + cls)) {
+                        colorData = clrMap[type + cls];
+                    }
+                    else if (clrMap.count(cls)) {
+                        colorData = clrMap[cls];
+                    }
+                    if (colorData.color != L"") {
+                        clr = colorData.color;
+                    }
+                    if (colorData.bg != L"") {
+                        bg = colorData.bg;
+                    }
+                }
+            }
+        }
+
+        applyStyle(clr, bg, endTag);
+        tagPos = str.Find(L"<", endTag);
+    }
+
     if (str.Find(L'<') >= 0) {
         str.Replace(L"<i>", L"{\\i1}");
         str.Replace(L"</i>", L"{\\i}");
@@ -560,25 +773,7 @@ static void WebVTT2SSA(CStringW& str, CStringW& cueTags)
         str.Replace(L"</u>", L"{\\u}");
     }
     if (str.Find(L'<') >= 0) {
-        CW2CW pszConvertedAnsiString(str);
-        std::wstring stdTmp(pszConvertedAnsiString);
-        std::wregex clrrgx(LR"(<c\.([a-z]*)\.bg_([a-z]*)>([^<]*)</c[\.\w\d]*>)");
-        std::wregex clrrgx2(LR"(<c\.([a-z]*)>([^<]*)</c[\.\w\d]*>)");
-        std::wsmatch match;
-
-        if (std::regex_search(stdTmp, match, clrrgx)) {
-            std::wstring clr = match[1];
-            std::wstring bgclr = match[2];
-            std::wstring text = match[3];
-            CStringW ssaClrTag = SSAColorTag(clr.c_str());
-            CStringW ssaBGClrTag = SSAColorTag(bgclr.c_str(), L"3c");
-            stdTmp = ssaClrTag + ssaBGClrTag + text.c_str();
-        } else if (std::regex_search(stdTmp, match, clrrgx2)) {
-            std::wstring clr = match[1];
-            std::wstring text = match[2];
-            CStringW ssaClrTag = SSAColorTag(clr.c_str());
-            stdTmp = ssaClrTag + text.c_str();
-        }
+        std::wstring stdTmp(str);
 
         // remove tags we don't support
         stdTmp = std::regex_replace(stdTmp, std::wregex(L"<c[.\\w\\d]*>"), L"");
@@ -600,17 +795,18 @@ static void WebVTT2SSA(CStringW& str, CStringW& cueTags)
     }
 
     if (!cueTags.IsEmpty()) {
-        CW2CW pszConvertedAnsiString(cueTags);
-        std::wstring stdTmp(pszConvertedAnsiString);
+        std::wstring stdTmp(cueTags);
         std::wregex alignRegex(L"align:(start|left|center|middle|end|right)");
         std::wsmatch match;
 
         if (std::regex_search(stdTmp, match, alignRegex)) {
             if (match[1] == L"start" || match[1] == L"left") {
                 str = L"{\\an1}" + str;
-            } else if (match[1] == L"center" || match[1] == L"middle") {
+            }
+            else if (match[1] == L"center" || match[1] == L"middle") {
                 str = L"{\\an2}" + str;
-            } else {
+            }
+            else {
                 str = L"{\\an3}" + str;
             }
         }
@@ -619,7 +815,8 @@ static void WebVTT2SSA(CStringW& str, CStringW& cueTags)
 
 static void WebVTT2SSA(CStringW& str) {
     CStringW discard;
-    WebVTT2SSA(str, discard);
+    WebVTTcolorMap discardMap;
+    WebVTT2SSA(str, discard, discardMap);
 }
 
 static bool OpenVTT(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet) {
@@ -645,12 +842,110 @@ static bool OpenVTT(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet) {
     };
 
 
+    //default cue color classes: https://w3c.github.io/webvtt/#default-text-color
+    WebVTTcolorMap cueColors = {
+        {L".white", WebVTTcolorData({L"ffffff", L""})},
+        {L".lime", WebVTTcolorData({L"00ff00", L""})},
+        {L".cyan", WebVTTcolorData({L"00ffff", L""})},
+        {L".red", WebVTTcolorData({L"ff0000", L""})},
+        {L".yellow", WebVTTcolorData({L"ffff00", L""})},
+        {L".magenta", WebVTTcolorData({L"ff00ff", L""})},
+        {L".blue", WebVTTcolorData({L"0000ff", L""})},
+        {L".black", WebVTTcolorData({L"000000", L""})},
+        {L".bg_white", WebVTTcolorData({L"", L"ffffff"})},
+        {L".bg_lime", WebVTTcolorData({L"", L"00ff00"})},
+        {L".bg_cyan", WebVTTcolorData({L"", L"00ffff"})},
+        {L".bg_red", WebVTTcolorData({L"", L"ff0000"})},
+        {L".bg_yellow", WebVTTcolorData({L"", L"ffff00"})},
+        {L".bg_magenta", WebVTTcolorData({L"", L"ff00ff"})},
+        {L".bg_blue", WebVTTcolorData({L"", L"0000ff"})},
+        {L".bg_black", WebVTTcolorData({L"", L"000000"})},
+    };
+
+    auto parseStyle = [&file, &cueColors](CStringW& buff) {
+        CStringW styleStr = L"";
+        while (file->ReadString(buff)) {
+            if (buff.Find(L"-->") != -1) { //not allowed in style block, so we drop out to cue parsing below
+                FastTrimRight(buff);
+                break;
+            }
+            if (buff.IsEmpty()) { //empty line not allowed in style block, drop out
+                break;
+            }
+            styleStr += L" " + buff;
+        }
+
+        int startComment = styleStr.Find(L"/*");
+        while (startComment != -1) { //remove comments
+            int endComment = styleStr.Find(L"*/", startComment + 2);
+            if (endComment == -1) {
+                endComment = styleStr.GetLength() - 1;
+            }
+            styleStr.Delete(startComment, endComment - startComment + 1);
+            startComment = styleStr.Find(L"/*");
+        }
+
+        if (!styleStr.IsEmpty()) {
+            auto parseColor = [](std::wstring styles, std::wstring attr = L"color") {
+                //we only support color styles for now
+                std::wregex clrPat(attr + LR"(\s*:\s*([a-z0]*)\s*;)"); //e.g., 0xffffff or white
+                std::wregex rgbPat(attr + LR"(\s*:\s*rgb\s*\(\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*\)\s*;)");
+                std::wsmatch match;
+                std::wstring clrStr = L"";
+                if (std::regex_search(styles, match, clrPat)) {
+                    clrStr = match[1];
+                }
+                else if (std::regex_search(styles, match, rgbPat)) {
+                    int r = stoi(match[1]) & 0xff;
+                    int g = stoi(match[2]) & 0xff;
+                    int b = stoi(match[3]) & 0xff;
+                    DWORD clr = (r << 16) + (g << 8) + b;
+                    std::wstringstream hexClr;
+                    hexClr << std::hex << clr;
+                    clrStr = hexClr.str();
+                }
+                return clrStr;
+            };
+
+            RegexUtil::wregexResults results;
+            std::wregex cueDefPattern(LR"(::cue\s*\{([^}]*)\})"); //default cue style
+            RegexUtil::wstringMatch(cueDefPattern, (const wchar_t*)styleStr, results);
+            if (results.size() > 0) {
+                auto iter = results[results.size() - 1];
+                std::wstring clr, bgClr;
+                clr = parseColor(iter[0]);
+                bgClr = parseColor(iter[0], L"background");
+                if (clr != L"" || bgClr != L"") {
+                    cueColors[L"::cue"] = WebVTTcolorData({ clr, bgClr });
+                }
+            }
+
+            std::wregex cuePattern(LR"(::cue\(([^)]+)\)\s*\{([^}]*)\})");
+            RegexUtil::wstringMatch(cuePattern, (const wchar_t*)styleStr, results);
+            for (const auto& iter : results) {
+                std::wstring clr, bgClr;
+                clr = parseColor(iter[1]);
+                bgClr = parseColor(iter[1], L"background");
+                if (clr != L"" || bgClr != L"") {
+                    cueColors[iter[0]] = WebVTTcolorData({ clr, bgClr });
+                }
+            }
+        }
+    };
+
     CStringW lastStr, lastBuff;
+    bool foundFirstCue = false;
     while (file->ReadString(buff)) {
         FastTrimRight(buff);
+        if (!foundFirstCue && !buff.IsEmpty()) { //STYLE blocks cannot show up after cues begin
+            if (buff == L"STYLE" || buff == L"Style:" /*have seen webvtt with incorrect format using 'Style:' instead of 'STYLE'*/) {
+                parseStyle(buff); //note that buff will contain next line when done, so we can still use it below
+            }
+        }
         if (buff.IsEmpty()) {
             continue;
         }
+
         int len = buff.GetLength();
         cueTags = L"";
         int c = swscanf_s(buff, L"%s --> %s %[^\n]s", start.GetBuffer(len), len, end.GetBuffer(len), len, cueTags.GetBuffer(len), len);
@@ -660,10 +955,10 @@ static bool OpenVTT(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet) {
 
         int hh1, mm1, ss1, ms1, hh2, mm2, ss2, ms2;
 
-        //very lazy: if we found a cue we will process it.  everything else gets skipped for now
         if ((c == 2 || c == 3) //either start/end or start/end/cuetags
             && readTimeCode(start, hh1, mm1, ss1, ms1)
             && readTimeCode(end, hh2, mm2, ss2, ms2)) {
+            foundFirstCue = true;
 
             CStringW str, tmp;
 
@@ -672,7 +967,7 @@ static bool OpenVTT(CTextFile* file, CSimpleTextSubtitle& ret, int CharSet) {
                 if (tmp.IsEmpty()) {
                     break;
                 }
-                WebVTT2SSA(tmp, cueTags);
+                WebVTT2SSA(tmp, cueTags, cueColors);
                 str += tmp + '\n';
             }
 

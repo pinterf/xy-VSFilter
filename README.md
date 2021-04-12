@@ -1,4 +1,4 @@
-# xy-VSFilter (pfmod) v3.2.0.804 (20210306)
+# xy-VSFilter (pfmod) v3.2.0.805 (20210412)
 https://github.com/pinterf/xy-VSFilter/
 
 Active branch: xy_sub_filter_rc5
@@ -17,6 +17,7 @@ Plus:
 
 # Info:
 - Package contains VSFilter.dll and XySubFilter.dll (x86 and x64 versions)
+
 - VSFilter.DLL: Included Avisynth filters (name and parameter signature)
   
       VobSub "cs"
@@ -24,11 +25,21 @@ Plus:
       TextSubSwapUV "b"
       MaskSub "[file]s[width]i[height]i[fps]f[length]i[charset]i[vfr]s[pixel_type]s"
 
-- Warning by the XySubFilter-3.1.0.746 beta authors (on forum's 1st post, from 2015):\
-  After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else 
-  XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
+- Warning by the XySubFilter-3.1.0.746 beta authors (on forum's 1st post, from 2015):
+  
+  After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
 
 # Change log:
+## v3.2.0.805 (20210412 - pinterf)
+
+* WebVTT support, embedded subtitles as well.
+  99% of it extracted from MPC-HC https://github.com/clsid2/mpc-hc, thanks to MPC-HC developers.
+* Changed the Subtitles library timestamp to REFERENCE_TIME (64 bit) internally.
+  For very-very long clips (use case: streaming) (slydiman)
+* Fix: ASS subtitles: styles with space after their names would fail to work (MPC HC/BE + external XySubFilter)
+  (report: MatiasMovie, solution by astiob)
+* Various code syntax fixes (clang compiler)
+
 ## v3.2.0.804 (20210306 - pinterf)
 * Add native YV16, YV24, P210 (YUV422P10) and P216 (YUV422P16) support.
   From TextSub Avisynth filter they even work.
@@ -37,15 +48,16 @@ Plus:
 * Source: new code base in new branch which finally works with Visual Studio 2019:\
   https://github.com/Cyberbeing/xy-VSFilter/tree/xy_sub_filter_rc5
 * upstream:
-  * (cyberbeing) Revert MPC-HC Tag Cache, restore xy Tag Cache\
+  * (cyberbeing) Revert MPC-HC Tag Cache, restore xy Tag Cache
+   
    Fixes a significant performance regression on certain SSA/ASS samples.
-  * (jesec) subtitles, subpic: enable SSE2 unconditionally\
-     Target OS (10.0) required users to have SSE2\
+  * (jesec) subtitles, subpic: enable SSE2 unconditionally
+     Target OS (10.0) required users to have SSE2
      It is meaningless to maintain backward compatibility
   * (jesec) Unicode conversion for file src/dsutil/DSUtil.cpp
      Remove support for DX7
-  * (jesec) Rasterizer::Rasterize: use optimized memsetSSE2.\
-    source: https://www.agner.org/optimize/
+  * (jesec) Rasterizer::Rasterize: use optimized memsetSSE2.
+    Source: https://www.agner.org/optimize/
   * (cyberbeing) Add VS2019 environment
 * Active branch changed to xy_sub_filter_rc5 on my (pinterf) side as well
 * Avisynth plugin
@@ -56,13 +68,19 @@ Plus:
 * version set manually in src/filters/transform/vsfilter/version_in.h
 
 ## v3.2.0.802 (20181031)
-* Change version\
-  Cyberbeing have released a patch for their original xy-VSFilter, their version stepped to v3.1.0.752.\
-  Since I thought the project was full-dead, my version numbering kept - after a range skip - the original numbering.\
-  Now I'm changing my versioning scheme to avoid possible future collision.
+* Change version numbering.
+  
+  Cyberbeing has released a patch for their original xy-VSFilter, their version stepped to v3.1.0.752
+  
+  Since I thought the project was full-dead, my version numbering kept - after a range skip - the original numbering.
+  
+  Now I'm changing my versioning scheme to 3.2.x.x to avoid possible future collision.
+  
 * Fix TextSub crash that could occur in rare circumstances (shssoichiro)
+
 * Fix for SSA/ASS repositioning becoming permanently disabled after typesetting was displayed\
   (madshi -> Cyberbeing v3.1.0.752 7th October 2018)
+  
 * Add BT.2020 Support\
   (madshi -> Cyberbeing v3.1.0.751 27th September 2018)
 

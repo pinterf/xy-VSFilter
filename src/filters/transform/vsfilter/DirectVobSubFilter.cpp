@@ -1629,6 +1629,8 @@ bool CDirectVobSubFilter::Open()
 			m_pSubStreams.AddTail(pSubStream);
             m_fIsSubStreamEmbeded.AddTail(false);
 			m_frd.files.AddTail(ret[i].full_file_name);
+
+            m_ExternalSubstreams.push_back(pSubStream);
 		}
 	}
 

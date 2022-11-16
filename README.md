@@ -1,4 +1,4 @@
-# xy-VSFilter (pfmod) v3.2.0.806 (20210412)
+# xy-VSFilter (pfmod) v3.2.0.808 (20221116)
 https://github.com/pinterf/xy-VSFilter/
 
 Active branch: xy_sub_filter_rc5
@@ -30,6 +30,15 @@ Plus:
   After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
 
 # Change log:
+## v3.2.0.808 (20221116)
+* Fix Possible unhandled exception in Masksub (https://github.com/pinterf/xy-VSFilter/issues/36)
+* Fix: no more vertically flipped MaskSub result for RGB32
+* remove latest scaling workaround
+  More on that: https://github.com/pinterf/xy-VSFilter/pull/34
+
+## v3.2.0.807 (20210522) - WIP
+* fix: scale between subtitle and video on CWord (Masaiki) (Issue: frx and fry tags wrong scaling)
+
 ## v3.2.0.806 (20210412)
 
 * proper WebVTT support fixes by adipose/MPC-HC

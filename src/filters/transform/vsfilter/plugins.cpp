@@ -934,16 +934,17 @@ public:
     {
 #include "avisynth/avisynth.h"
 
-        static bool s_fSwapUV = false;
+        static bool s_fSwapUV = false; // set by TextSubSwapUV, not quite MT friendly
 
         class CAvisynthFilter : public GenericVideoFilter, virtual public CFilter
         {
         public:
             bool has_at_least_v8; // avs interface version check
+            bool useRGBAwhenRGB32; // instead of old method: bool "RGBA" Avisynth variable. default false for TextSub, true for MaskSub
 
             VFRTranslator* vfr;
 
-            CAvisynthFilter(PClip c, IScriptEnvironment* env, VFRTranslator* _vfr = 0) : GenericVideoFilter(c), vfr(_vfr)
+            CAvisynthFilter(PClip c, IScriptEnvironment* env, bool _useRGBAwhenRGB32, VFRTranslator* _vfr = 0) : GenericVideoFilter(c), useRGBAwhenRGB32(_useRGBAwhenRGB32), vfr(_vfr)
             {
                 has_at_least_v8 = true;
                 try { env->CheckVersion(8); }
@@ -1260,7 +1261,7 @@ public:
                 dst.h = vi.height;
 
                 dst.type =
-                    vi.IsRGB32() ? (env->GetVar("RGBA").AsBool() ? MSP_RGBA : MSP_RGB32) :
+                    vi.IsRGB32() ? (useRGBAwhenRGB32 ? MSP_RGBA : MSP_RGB32) :
                     vi.IsRGB24() ? MSP_RGB24 :
                     vi.IsYUY2() ? MSP_YUY2 :
                     doYV16asYUY2 && vi.IsYV16() ? MSP_YUY2 :
@@ -1475,9 +1476,9 @@ public:
         class CVobSubAvisynthFilter : public CVobSubFilter, public CAvisynthFilter
         {
         public:
-            CVobSubAvisynthFilter(PClip c, const char* fn, IScriptEnvironment* env)
+            CVobSubAvisynthFilter(PClip c, const char* fn, bool useRGBAwhenRGB32, IScriptEnvironment* env)
                 : CVobSubFilter(CString(fn))
-                , CAvisynthFilter(c, env) {
+                , CAvisynthFilter(c, env, useRGBAwhenRGB32) {
                 if (!m_pSubPicProvider) {
                     env->ThrowError("VobSub: Can't open \"%s\"", fn);
                 }
@@ -1486,15 +1487,16 @@ public:
 
         AVSValue __cdecl VobSubCreateS(AVSValue args, void* user_data, IScriptEnvironment* env)
         {
-            return (DEBUG_NEW CVobSubAvisynthFilter(args[0].AsClip(), args[1].AsString(), env));
+            const bool useRGBAwhenRGB32 = false; // ex-"RGBA" variable
+            return (DEBUG_NEW CVobSubAvisynthFilter(args[0].AsClip(), args[1].AsString(), useRGBAwhenRGB32, env));
         }
 
         class CTextSubAvisynthFilter : public CTextSubFilter, public CAvisynthFilter
         {
         public:
-            CTextSubAvisynthFilter(PClip c, IScriptEnvironment* env, const char* fn, int CharSet = DEFAULT_CHARSET, float fps = -1, VFRTranslator* vfr = 0) //vfr patch
+            CTextSubAvisynthFilter(PClip c, IScriptEnvironment* env, const char* fn, bool useRGBAwhenRGB32, int CharSet = DEFAULT_CHARSET, float fps = -1, VFRTranslator* vfr = 0) //vfr patch
                 : CTextSubFilter(CString(fn), CharSet, fps)
-                , CAvisynthFilter(c, env, vfr) {
+                , CAvisynthFilter(c, env, useRGBAwhenRGB32, vfr) {
                 if (!m_pSubPicProvider) {
                     env->ThrowError("TextSub: Can't open \"%s\"", fn);
                 }
@@ -1511,10 +1513,13 @@ public:
                 vfr = GetVFRTranslator(args[4].AsString());
             }
 
+            const bool useRGBAwhenRGB32 = false; // ex-"RGBA" variable
+
             return (DEBUG_NEW CTextSubAvisynthFilter(
                 args[0].AsClip(),
                 env,
                 args[1].AsString(),
+                useRGBAwhenRGB32,
                 args[2].AsInt(DEFAULT_CHARSET),
                 (float)args[3].AsFloat(-1),
                 vfr));
@@ -1541,7 +1546,7 @@ public:
 
             // well, its a source filter
             AVSValue fps(args[3].AsFloat(25));
-            AVSValue  tab[6] = {
+            AVSValue  tab[5] = {
               args[1],
               args[2],
               args[3],
@@ -1557,12 +1562,13 @@ public:
               "pixel_type"
             };
             AVSValue clip(env->Invoke("Blackness", value, nom));
-            env->SetVar(env->SaveString("RGBA"), true);
+            const bool useRGBAwhenRGB32 = true;
             //return (DNew CTextSubAvisynthFilter(clip.AsClip(), env, args[0].AsString()));
             return (DEBUG_NEW CTextSubAvisynthFilter(
                 clip.AsClip(),
                 env,
                 args[0].AsString(),
+                useRGBAwhenRGB32,
                 args[5].AsInt(DEFAULT_CHARSET),
                 (float)args[3].AsFloat(-1),
                 vfr));
@@ -1584,7 +1590,6 @@ public:
             env->AddFunction("TextSub", "c[file]s[charset]i[fps]f[vfr]s", TextSubCreateGeneral, 0);
             env->AddFunction("TextSubSwapUV", "b", TextSubSwapUV, 0);
             env->AddFunction("MaskSub", "[file]s[width]i[height]i[fps]f[length]i[charset]i[vfr]s[pixel_type]s", MaskSubCreate, 0); // new pixel_type parameter
-            env->SetVar(env->SaveString("RGBA"), false);
             return NULL;
         }
     }

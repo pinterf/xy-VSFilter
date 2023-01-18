@@ -457,9 +457,16 @@ public:
     virtual void Copy(CSimpleTextSubtitle& sts);
     virtual void Empty();
 
-public:
+private:
+    /*
+     * The layout_size parameter is either derived from
+     * valid LayoutRes{X,Y} script headers (both must be valid!)
+     * or if those do not exist, equal to the video's storage resolution.
+     * Will call Deinit()
+     */
     bool Init(const CRectCoor2& video_rect, const CRectCoor2& subtitle_target_rect,
-        const SIZE& original_video_size); // will call Deinit()
+        const SIZE& layout_size);
+public:
     void Deinit();
 
     DECLARE_IUNKNOWN

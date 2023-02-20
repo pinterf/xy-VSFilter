@@ -163,11 +163,11 @@ CSRIAPI void *csri_query_ext(csri_rend *rend, csri_ext_id extname) { return 0; }
 // Get info for renderer
 static struct csri_info csri_vsfilter_info = {
 #ifdef _DEBUG
-	"xy-vsfilter_textsub_debug", // name
+	"pf-xy-vsfilter_textsub_debug", // name
 #else
-	"xy-vsfilter_textsub", // name
+	"pf-xy-vsfilter_textsub", // name
 #endif
-	"3.0", // version
+	"3.2", // version
 	"xy-VSFilter/TextSub", // longname
 	"Gabest", // author
 	"Copyright (c) 2003-2014 by Gabest et al." // copyright

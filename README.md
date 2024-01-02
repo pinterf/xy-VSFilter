@@ -1,4 +1,4 @@
-# xy-VSFilter (pfmod) v3.2.0.808 (20221116)
+# xy-VSFilter (pfmod) v3.2.0.809 (20240102)
 https://github.com/pinterf/xy-VSFilter/
 
 Active branch: xy_sub_filter_rc5
@@ -13,6 +13,7 @@ Plus:
 
 # Useful links:
 [Doom9 forum](https://forum.doom9.org/showthread.php?t=168282)
+
 [Avisynth wiki](http://avisynth.nl/index.php/Xy-VSFilter)
 
 # Info:
@@ -30,6 +31,22 @@ Plus:
   After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
 
 # Change log:
+
+## v3.2.0.809 (20240102)
+
+Updates, fixes and some backports from Cyberbeing/xy-VSFilter by TheOneric, Masaiki and Cyberbeing
+
+* Gracefully handle negative Encoding values
+  more on this: https://github.com/pinterf/xy-VSFilter/commit/102897189902658ec68ef691eb3dd8d89f099985
+* Update CSRI name
+* Use distinct CSRI name and update CSRI version:
+  Adjust the name so users can distinguish Cyberbeing/xy-VSFilter
+  from pinterf/xy-VSFilter if builds from both are placed into Aegisub’s csri directory
+* fix: time shift when playing external sup files
+* fix: close sup file and read stop time of sample
+* Introduce LayoutRes{X,Y} script headers. See details here:
+  https://github.com/pinterf/xy-VSFilter/commit/8a46df19666191f6fcaa44811123c34f165f358e
+
 ## v3.2.0.808 (20221116)
 * Fix Possible unhandled exception in Masksub (https://github.com/pinterf/xy-VSFilter/issues/36)
 * Fix: no more vertically flipped MaskSub result for RGB32

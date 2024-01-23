@@ -1,4 +1,4 @@
-# xy-VSFilter (pfmod) v3.2.0.809 (20240102)
+# xy-VSFilter (pfmod) v3.2.0.810 (20240123)
 https://github.com/pinterf/xy-VSFilter/
 
 Active branch: xy_sub_filter_rc5
@@ -31,6 +31,10 @@ Plus:
   After downloading XySubFilter BETA3, you must ensure to run the 'Install' bat (not only replace) or else XySubFilter's autoload helper required for entering the DirectShow graph with external subtitles will not be installed
 
 # Change log:
+
+## v3.2.0.810 (20240123)
+
+* Fix VsFilter crash on load/release (as external DirectVobSub in players). Regression since v804.
 
 ## v3.2.0.809 (20240102)
 

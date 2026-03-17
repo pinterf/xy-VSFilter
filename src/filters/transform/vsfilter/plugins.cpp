@@ -938,14 +938,42 @@ public:
 
         class CAvisynthFilter : public GenericVideoFilter, virtual public CFilter
         {
-        public:
+            int msp_type;
             bool has_at_least_v8; // avs interface version check
             bool useRGBAwhenRGB32; // instead of old method: bool "RGBA" Avisynth variable. default false for TextSub, true for MaskSub
+            bool YV16asYUY2;
+        public:
 
             VFRTranslator* vfr;
 
-            CAvisynthFilter(PClip c, IScriptEnvironment* env, bool _useRGBAwhenRGB32, VFRTranslator* _vfr = 0) : GenericVideoFilter(c), useRGBAwhenRGB32(_useRGBAwhenRGB32), vfr(_vfr)
+            CAvisynthFilter(PClip c, IScriptEnvironment* env, bool _useRGBAwhenRGB32, VFRTranslator* _vfr = 0)
+                : GenericVideoFilter(c)
+                , useRGBAwhenRGB32(_useRGBAwhenRGB32)
+                , vfr(_vfr)
             {
+                const bool doYV16asYUY2 = false; // hey, we have native YV16 now
+                YV16asYUY2 = doYV16asYUY2 && vi.IsYV16(); // must use single YUY2 buffer internally
+
+                msp_type =
+                    vi.IsRGB32() ? (useRGBAwhenRGB32 ? MSP_RGBA : MSP_RGB32) :
+                    vi.IsRGB24() ? MSP_RGB24 :
+                    vi.IsYUY2() ? MSP_YUY2 :
+                    doYV16asYUY2 && vi.IsYV16() ? MSP_YUY2 :
+                    /*vi.IsYV12()*/ vi.pixel_type == VideoInfo::CS_YV12 ? (s_fSwapUV ? MSP_IYUV : MSP_YV12) :
+                    /*vi.IsIYUV()*/ vi.pixel_type == VideoInfo::CS_IYUV ? (s_fSwapUV ? MSP_YV12 : MSP_IYUV) :
+                    vi.pixel_type == VideoInfo::CS_YUV420P10 ? MSP_P010 : // P.F. 180224 10 bit support
+                    vi.pixel_type == VideoInfo::CS_YUV420P16 ? MSP_P016 : // P.F. 180224 16 bit support
+                    // 20210305
+                    vi.pixel_type == VideoInfo::CS_YUV422P10 ? MSP_P210 :
+                    vi.pixel_type == VideoInfo::CS_YUV422P16 ? MSP_P216 :
+                    vi.IsYV16() ? MSP_YV16 : // not natively yet. converted to YUY2 on the fly
+                    vi.IsYV24() ? MSP_YV24 :
+                    -1;
+
+                if (msp_type == -1) {
+                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YV16,YV24,YUV420P10/P16,YUV422P10/P16.");
+                }
+
                 has_at_least_v8 = true;
                 try { env->CheckVersion(8); }
                 catch (const AvisynthError&) { has_at_least_v8 = false; }
@@ -1253,33 +1281,12 @@ public:
                 const bool sse2 = (env->GetCPUFlags() & CPUF_SSE2) != 0;
                 const bool sse41 = (env->GetCPUFlags() & CPUF_SSE4_1) != 0;
 
-                const bool doYV16asYUY2 = false; // hey, we have native YV16 now
-
                 SubPicDesc dst;
                 // dst pointers: later
                 dst.w = vi.width;
                 dst.h = vi.height;
 
-                dst.type =
-                    vi.IsRGB32() ? (useRGBAwhenRGB32 ? MSP_RGBA : MSP_RGB32) :
-                    vi.IsRGB24() ? MSP_RGB24 :
-                    vi.IsYUY2() ? MSP_YUY2 :
-                    doYV16asYUY2 && vi.IsYV16() ? MSP_YUY2 :
-                    /*vi.IsYV12()*/ vi.pixel_type == VideoInfo::CS_YV12 ? (s_fSwapUV ? MSP_IYUV : MSP_YV12) :
-                    /*vi.IsIYUV()*/ vi.pixel_type == VideoInfo::CS_IYUV ? (s_fSwapUV ? MSP_YV12 : MSP_IYUV) :
-                    vi.pixel_type == VideoInfo::CS_YUV420P10 ? MSP_P010 : // P.F. 180224 10 bit support
-                    vi.pixel_type == VideoInfo::CS_YUV420P16 ? MSP_P016 : // P.F. 180224 16 bit support
-                    // 20210305
-                    vi.pixel_type == VideoInfo::CS_YUV422P10 ? MSP_P210 :
-                    vi.pixel_type == VideoInfo::CS_YUV422P16 ? MSP_P216 :
-                    vi.IsYV16() ? MSP_YV16 : // not natively yet. converted to YUY2 on the fly
-                    vi.IsYV24() ? MSP_YV24 :
-                    -1;
-
-                if (dst.type == -1)
-                    env->ThrowError("Format not supported. Use RGB24,RGB32,YUY2,YV12,YV16,YV24,YUV420P10/P16,YUV422P10/P16.");
-
-                bool YV16asYUY2 = doYV16asYUY2 && vi.IsYV16(); // must use single YUY2 buffer internally
+                dst.type = msp_type;
 
                 bool semi_packed_p10 = (vi.pixel_type == VideoInfo::CS_YUV420P10) || (vi.pixel_type == VideoInfo::CS_YUV422P10);
                 bool semi_packed_p16 = (vi.pixel_type == VideoInfo::CS_YUV420P16) || (vi.pixel_type == VideoInfo::CS_YUV422P16);

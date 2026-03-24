@@ -180,7 +180,7 @@ void CDirectVobSubFilter::GetOutputSize(int& w, int& h, int& arx, int& ary)
 HRESULT CDirectVobSubFilter::TryNotCopy(IMediaSample* pIn, const CMediaType& mt, const BITMAPINFOHEADER& bihIn )
 {
     CSize sub(m_w, m_h);
-    CSize in(bihIn.biWidth, bihIn.biHeight);
+    CSize in(bihIn.biWidth, abs(bihIn.biHeight));
     BYTE* pDataIn = NULL;
     if(FAILED(pIn->GetPointer(&pDataIn)) || !pDataIn)
         return S_FALSE;
@@ -754,7 +754,7 @@ void CDirectVobSubFilter::InitSubPicQueue()
         m_pTempPicBuff.Allocate(m_spd.pitch*m_spd.h);
 	m_spd.bits = (BYTE*)m_pTempPicBuff;
 
-	CSize video(bihIn.biWidth, bihIn.biHeight), window = video;
+	CSize video(bihIn.biWidth, abs(bihIn.biHeight)), window = video;
 	if(AdjustFrameSize(window)) video += video;
 	ASSERT(window == CSize(m_w, m_h));
     CRect video_rect(CPoint((window.cx - video.cx)/2, (window.cy - video.cy)/2), video);

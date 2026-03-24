@@ -89,7 +89,7 @@ CString OutputFmt2String(const OutputFormatBase& fmt)
 {
     CString ret = CString(GuidNames[*fmt.subtype]);
     if(!ret.Left(13).CompareNoCase(_T("MEDIASUBTYPE_"))) ret = ret.Mid(13);
-    if(fmt.biCompression == 3) ret += _T(" BITF");
+    if(fmt.biCompression == BI_BITFIELDS) ret += _T(" BITF");
     if(*fmt.subtype == MEDIASUBTYPE_I420) ret = _T("I420"); // FIXME
     else if(*fmt.subtype == MEDIASUBTYPE_NV21) ret = _T("NV21"); // FIXME
     return(ret);

@@ -507,7 +507,7 @@ CString VIH2String(int i)
 {
 	CString ret = CString(GuidNames[*vihs[i].subtype]);
 	if(!ret.Left(13).CompareNoCase(_T("MEDIASUBTYPE_"))) ret = ret.Mid(13);
-	if(vihs[i].vih.bmiHeader.biCompression == 3) ret += _T(" BITF");
+	if(vihs[i].vih.bmiHeader.biCompression == BI_BITFIELDS) ret += _T(" BITF");
 	if(*vihs[i].subtype == MEDIASUBTYPE_I420) ret = _T("I420"); // FIXME
     else if(*vihs[i].subtype == MEDIASUBTYPE_NV21) ret = _T("NV21"); // FIXME
 	return(ret);

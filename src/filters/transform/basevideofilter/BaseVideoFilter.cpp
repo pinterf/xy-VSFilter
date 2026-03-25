@@ -317,7 +317,7 @@ HRESULT hr1 = 0, hr2 = 0;
 			else // stupid overlay mixer won't let us know the new pitch...
 			{
 				long size = pOut->GetSize();
-				bmi->biWidth = size / bmi->biHeight * 8 / bmi->biBitCount;
+				bmi->biWidth = size / abs(bmi->biHeight) * 8 / bmi->biBitCount;
 			}
 		}
 		else
@@ -506,11 +506,12 @@ HRESULT CBaseVideoFilter::CheckInputType(const CMediaType* mtIn)
 {
 	BITMAPINFOHEADER bih;
 	ExtractBIH(mtIn, &bih);
-    
+
 	return mtIn->majortype == MEDIATYPE_Video 
 		&& GetInputSubtypePosition(mtIn->subtype)!=-1        
 		&& (mtIn->formattype == FORMAT_VideoInfo || mtIn->formattype == FORMAT_VideoInfo2)
-		&& bih.biHeight > 0
+		&& bih.biWidth > 0
+		&& bih.biHeight != 0
 		? S_OK
 		: VFW_E_TYPE_NOT_ACCEPTED;
 }

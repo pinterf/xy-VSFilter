@@ -1,4 +1,4 @@
-/* 
+﻿/* 
  *	Copyright (C) 2003-2006 Gabest
  *	http://www.gabest.org
  *
@@ -1315,6 +1315,42 @@ CDirectVobSub::CDirectVobSub( const Option *options, CCritSec * pLock )
 
     m_xy_bool_opt[BOOL_ENABLE_ZP_ICON] = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_ENABLEZPICON), 0);
 
+    // Dual/multi-track defaults (fork addition). Secondary is unset and disabled
+    // out of the box so the stock single-provider path is unchanged.
+    m_xy_str_opt[STRING_FILE_NAME_SECONDARY] = theApp.GetProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_FILE_NAME_SECONDARY), _T(""));
+    m_xy_bool_opt[BOOL_DUAL_SUB_ENABLED] = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_DUAL_SUB_ENABLED), 0);
+    m_xy_bool_opt[BOOL_SECONDARY_ALIGN_TOP] = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_ALIGN_TOP), 1);
+    m_xy_int_opt[INT_SECONDARY_TOP_MARGIN] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_TOP_MARGIN), 40);
+    if (m_xy_int_opt[INT_SECONDARY_TOP_MARGIN] < 0)
+    {
+        m_xy_int_opt[INT_SECONDARY_TOP_MARGIN] = 0;
+    }
+    // Per-track composition defaults (all identity, so nothing changes when
+    // unset). secondary_vertical defaults to the legacy align-top behaviour.
+    m_xy_int_opt[INT_SECONDARY_SCALE] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_SCALE), 100);
+    if (m_xy_int_opt[INT_SECONDARY_SCALE] <= 0)
+    {
+        m_xy_int_opt[INT_SECONDARY_SCALE] = 100;
+    }
+    m_xy_int_opt[INT_SECONDARY_OPACITY] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_OPACITY), 255);
+    if (m_xy_int_opt[INT_SECONDARY_OPACITY] < 0)   m_xy_int_opt[INT_SECONDARY_OPACITY] = 0;
+    if (m_xy_int_opt[INT_SECONDARY_OPACITY] > 255) m_xy_int_opt[INT_SECONDARY_OPACITY] = 255;
+    m_xy_int_opt[INT_SECONDARY_Z_ORDER] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_Z_ORDER), 1);
+    m_xy_int_opt[INT_SECONDARY_VERTICAL] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_VERTICAL),
+        m_xy_bool_opt[BOOL_SECONDARY_ALIGN_TOP] ? 1 : 0);
+    m_xy_int_opt[INT_PRIMARY_VERTICAL] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_PRIMARY_VERTICAL), 0);
+    // Container-side secondary: an embedded subtitle PID read from the media
+    // file itself. 0 = off, so the stock path is unchanged.
+    m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_EMBEDDED_PID), 0);
+
+    m_xy_str_opt[STRING_SECONDARY_LANGUAGE_LIST] =
+        theApp.GetProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_LANGUAGE_LIST), _T(""));
+
+    // Coexistence default: stand down when another Xy-family filter is active.
+    // 1 forces the safe behaviour, 0 lets this filter take over the consumer.
+    m_xy_bool_opt[BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER] =
+        !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_STAND_DOWN_WHEN_ANOTHER_XY_FILTER), 1);
+
     LoadKnownSourceFilters(&m_known_source_filters_guid, &m_known_source_filters_name);
 
     if(pData)
@@ -1706,6 +1742,41 @@ CDVS4XySubFilter::CDVS4XySubFilter( const Option *options, CCritSec * pLock )
     m_xy_bool_opt[BOOL_FORCE_DEFAULT_STYLE] = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL)
         , ResStr(IDS_RG_FORCE_DEFAULT_STYLE), 0);
 
+    // Dual/multi-track defaults (fork addition). Secondary unset/disabled by
+    // default keeps the stock single-provider path unchanged.
+    m_xy_str_opt[STRING_FILE_NAME_SECONDARY] = theApp.GetProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_FILE_NAME_SECONDARY), _T(""));
+    m_xy_bool_opt[BOOL_DUAL_SUB_ENABLED] = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_DUAL_SUB_ENABLED), 0);
+    m_xy_bool_opt[BOOL_SECONDARY_ALIGN_TOP] = !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_ALIGN_TOP), 1);
+    m_xy_int_opt[INT_SECONDARY_TOP_MARGIN] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_TOP_MARGIN), 40);
+    if (m_xy_int_opt[INT_SECONDARY_TOP_MARGIN] < 0)
+    {
+        m_xy_int_opt[INT_SECONDARY_TOP_MARGIN] = 0;
+    }
+    // Per-track composition defaults; see the twin block above.
+    m_xy_int_opt[INT_SECONDARY_SCALE] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_SCALE), 100);
+    if (m_xy_int_opt[INT_SECONDARY_SCALE] <= 0)
+    {
+        m_xy_int_opt[INT_SECONDARY_SCALE] = 100;
+    }
+    m_xy_int_opt[INT_SECONDARY_OPACITY] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_OPACITY), 255);
+    if (m_xy_int_opt[INT_SECONDARY_OPACITY] < 0)   m_xy_int_opt[INT_SECONDARY_OPACITY] = 0;
+    if (m_xy_int_opt[INT_SECONDARY_OPACITY] > 255) m_xy_int_opt[INT_SECONDARY_OPACITY] = 255;
+    m_xy_int_opt[INT_SECONDARY_Z_ORDER] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_Z_ORDER), 1);
+    m_xy_int_opt[INT_SECONDARY_VERTICAL] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_VERTICAL),
+        m_xy_bool_opt[BOOL_SECONDARY_ALIGN_TOP] ? 1 : 0);
+    m_xy_int_opt[INT_PRIMARY_VERTICAL] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_PRIMARY_VERTICAL), 0);
+    // Container-side secondary: an embedded subtitle PID read from the media
+    // file itself. 0 = off, so the stock path is unchanged.
+    m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID] = theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_EMBEDDED_PID), 0);
+
+    // Secondary auto-load language list; empty by default (no auto secondary).
+    m_xy_str_opt[STRING_SECONDARY_LANGUAGE_LIST] =
+        theApp.GetProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_LANGUAGE_LIST), _T(""));
+
+    // Coexistence default; see the twin block above.
+    m_xy_bool_opt[BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER] =
+        !!theApp.GetProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_STAND_DOWN_WHEN_ANOTHER_XY_FILTER), 1);
+
     LoadKnownSourceFilters(&m_known_source_filters_guid, &m_known_source_filters_name);
 }
 
@@ -1813,6 +1884,19 @@ STDMETHODIMP CDVS4XySubFilter::UpdateRegistry()
     theApp.WriteProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_RGB_CORRECTION), str_rgb_correction_setting);
 
     theApp.WriteProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_LOAD_EXT_LIST), m_xy_str_opt[STRING_LOAD_EXT_LIST]);//fix me:m_xy_str_opt[] is wide char string
+
+    theApp.WriteProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_FILE_NAME_SECONDARY), m_xy_str_opt[STRING_FILE_NAME_SECONDARY]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_DUAL_SUB_ENABLED), m_xy_bool_opt[BOOL_DUAL_SUB_ENABLED]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_ALIGN_TOP), m_xy_bool_opt[BOOL_SECONDARY_ALIGN_TOP]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_TOP_MARGIN), m_xy_int_opt[INT_SECONDARY_TOP_MARGIN]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_SCALE), m_xy_int_opt[INT_SECONDARY_SCALE]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_OPACITY), m_xy_int_opt[INT_SECONDARY_OPACITY]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_Z_ORDER), m_xy_int_opt[INT_SECONDARY_Z_ORDER]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_VERTICAL), m_xy_int_opt[INT_SECONDARY_VERTICAL]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_PRIMARY_VERTICAL), m_xy_int_opt[INT_PRIMARY_VERTICAL]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_EMBEDDED_PID), m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID]);
+    theApp.WriteProfileInt(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_STAND_DOWN_WHEN_ANOTHER_XY_FILTER), m_xy_bool_opt[BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER]);
+    theApp.WriteProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_SECONDARY_LANGUAGE_LIST), m_xy_str_opt[STRING_SECONDARY_LANGUAGE_LIST]);
 
     CString str_pgs_yuv_type = m_xy_str_opt[STRING_PGS_YUV_RANGE] + _T(".") + m_xy_str_opt[STRING_PGS_YUV_MATRIX];
     theApp.WriteProfileString(ResStr(IDS_R_GENERAL), ResStr(IDS_RG_PGS_COLOR_TYPE), str_pgs_yuv_type);

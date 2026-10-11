@@ -1,7 +1,11 @@
-// Microsoft Visual C++ generated resource script.
+﻿﻿// Microsoft Visual C++ generated resource script.
 //
 #include "resource.h"
 #include "version.h"
+
+// Identity strings (DUALSUBS_*). The header's __declspec/__uuidof block is
+// guarded by __cplusplus, so the resource compiler sees only the macro section.
+#include "dualsubs_identity.h"
 
 #define APSTUDIO_READONLY_SYMBOLS
 /////////////////////////////////////////////////////////////////////////////
@@ -89,20 +93,20 @@ BEGIN
             VALUE "Comments", "http://code.google.com/p/xy-vsfilter/"
             VALUE "CompanyName", "xy-VSFilter Team"
 #if defined XY_SUB_FILTER_DLL
-            VALUE "FileDescription", "XySubFilter for MadVR"
+            VALUE "FileDescription", DUALSUBS_FILTER_DISPLAY " for MadVR"
             VALUE "FileVersion", XY_VSFILTER_VERSION_STR
-            VALUE "InternalName", "XySubFilter"
+            VALUE "InternalName", DUALSUBS_FILTER_NAME
             VALUE "LegalCopyright", "Copyright (C) 2001-2012 Yu Zhuohuang, Gabest et. al."
-            VALUE "OriginalFilename", "XySubFilter.dll"
-            VALUE "ProductName", "XySubFilter"
+            VALUE "OriginalFilename", DUALSUBS_DLL_NAME
+            VALUE "ProductName", DUALSUBS_FILTER_NAME
             VALUE "ProductVersion", XY_VSFILTER_VERSION_STR
 #elif defined XY_SUB_FILTER_CONSUMER_DLL
-            VALUE "FileDescription", "XySubFilter Consumer"
+            VALUE "FileDescription", DUALSUBS_FILTER_DISPLAY " Consumer"
             VALUE "FileVersion", XY_VSFILTER_VERSION_STR
-            VALUE "InternalName", "XySubFilterConsumer"
+            VALUE "InternalName", DUALSUBS_FILTER_NAME "Consumer"
             VALUE "LegalCopyright", "Copyright (C) 2001-2012 Yu Zhuohuang, Gabest et. al."
-            VALUE "OriginalFilename", "XySubFilteConsumer.dll"
-            VALUE "ProductName", "XySubFilteConsumer"
+            VALUE "OriginalFilename", DUALSUBS_FILTER_NAME "Consumer.dll"
+            VALUE "ProductName", DUALSUBS_FILTER_NAME "Consumer"
             VALUE "ProductVersion", XY_VSFILTER_VERSION_STR
 #else
             VALUE "FileDescription", "VobSub & TextSub filter for DirectShow/VirtualDub/Avisynth"
@@ -461,6 +465,48 @@ BEGIN
     RTEXT           "Cache Size(MB)",IDC_LABLE_CACHE_SIZE,14,60,57,8
 END
 
+IDD_XY_SUB_FILTER_DUALPAGE DIALOGEX 0, 0, 247, 284
+STYLE DS_SETFONT | WS_CHILD
+FONT 8, "MS Sans Serif", 400, 0, 0x1
+BEGIN
+    CONTROL         "Enable &dual subtitles (compose a second subtitle track)",IDC_DUAL_SUB_ENABLED,
+                    "Button",BS_AUTOCHECKBOX | WS_TABSTOP,7,7,233,12
+    GROUPBOX        "Secondary subtitle file",IDC_STATIC,7,24,233,41
+    LTEXT           "File:",IDC_STATIC,15,38,20,8
+    EDITTEXT        IDC_SECONDARY_FILE,38,36,156,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "&Browse...",IDC_SECONDARY_BROWSE,198,36,35,14
+    LTEXT           "One or more paths, optionally 'path|scale|opacity|align|margin|z' separated by ';'.",
+                    IDC_STATIC,15,52,218,8
+    GROUPBOX        "Embedded stream (current media)",IDC_STATIC,7,69,233,45
+    COMBOBOX        IDC_SECONDARY_EMBEDDED_LIST,15,82,178,120,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Refresh",IDC_SECONDARY_EMBEDDED_REFRESH,198,82,35,14
+    LTEXT           "(no media / no embedded streams)",IDC_SECONDARY_EMBEDDED_NOTE,15,101,218,8
+    GROUPBOX        "Composition",IDC_STATIC,7,118,233,116
+    LTEXT           "Scale %:",IDC_STATIC,15,134,35,8
+    EDITTEXT        IDC_SECONDARY_SCALE,52,132,40,13,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SECONDARY_SCALE_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,92,132,11,13
+    LTEXT           "Opacity (0-255):",IDC_STATIC,120,134,54,8
+    EDITTEXT        IDC_SECONDARY_OPACITY,176,132,40,13,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SECONDARY_OPACITY_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,216,132,11,13
+    LTEXT           "Secondary vertical placement:",IDC_STATIC,15,154,104,8
+    COMBOBOX        IDC_SECONDARY_VERTICAL,122,152,70,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "Top margin:",IDC_STATIC,15,172,42,8
+    EDITTEXT        IDC_SECONDARY_TOP_MARGIN,60,170,40,13,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SECONDARY_TOP_MARGIN_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,100,170,11,13
+    LTEXT           "Z-order:",IDC_STATIC,120,172,38,8
+    EDITTEXT        IDC_SECONDARY_Z_ORDER,160,170,40,13,ES_RIGHT | ES_AUTOHSCROLL | ES_NUMBER
+    CONTROL         "",IDC_SECONDARY_Z_ORDER_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,200,170,11,13
+    LTEXT           "Primary vertical placement:",IDC_STATIC,15,190,98,8
+    COMBOBOX        IDC_PRIMARY_VERTICAL,116,188,70,60,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    LTEXT           "(as-is keeps the stock placement)",IDC_STATIC,15,208,218,8
+    GROUPBOX        "Auto-load secondary",IDC_STATIC,7,238,233,40
+    LTEXT           "Languages:",IDC_STATIC,15,252,38,8
+    EDITTEXT        IDC_SECONDARY_LANG_LIST,56,250,110,14,ES_AUTOHSCROLL
+    PUSHBUTTON      "&Reload now",IDC_SECONDARY_RELOAD,172,250,60,14
+    LTEXT           "Comma-separated ISO codes (e.g. eng,jpn). Empty disables auto-load.",
+                    IDC_STATIC,15,267,218,8
+END
+
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -702,6 +748,7 @@ STRINGTABLE
 BEGIN
     IDD_XY_SUB_FILTER_MAINPAGE "&Main"
     IDD_XY_SUB_FILTER_MOREPAGE "M&ore"
+    IDD_XY_SUB_FILTER_DUALPAGE "&Dual Subtitles"
 END
 
 STRINGTABLE
@@ -776,6 +823,18 @@ BEGIN
     IDS_RG_RGB_CORRECTION               "rgb_correction"
     IDS_RG_RGB_OUTPUT_LEVEL             "rgb_output_level"
     IDS_RG_RENDER_TO_ORIGINAL_VIDEO_SIZE "render_to_original_video_size"
+    IDS_RG_FILE_NAME_SECONDARY       "secondary_file"
+    IDS_RG_DUAL_SUB_ENABLED          "dual_sub_enabled"
+    IDS_RG_SECONDARY_TOP_MARGIN      "secondary_top_margin"
+    IDS_RG_SECONDARY_ALIGN_TOP       "secondary_align_top"
+    IDS_RG_SECONDARY_SCALE           "secondary_scale"
+    IDS_RG_SECONDARY_OPACITY         "secondary_opacity"
+    IDS_RG_SECONDARY_Z_ORDER         "secondary_z_order"
+    IDS_RG_SECONDARY_VERTICAL        "secondary_vertical"
+    IDS_RG_PRIMARY_VERTICAL          "primary_vertical"
+    IDS_RG_SECONDARY_LANGUAGE_LIST   "secondary_language_list"
+    IDS_RG_SECONDARY_EMBEDDED_PID    "secondary_embedded_pid"
+    IDS_RG_STAND_DOWN_WHEN_ANOTHER_XY_FILTER "xy_standdown"
     IDS_RG_SUPPORTED_VERSION "supported_version"
     IDS_RG_VERSION          "version"
 #else
@@ -815,6 +874,7 @@ BEGIN
     IDS_RG_USER_SPECIFIED_LAYOUT_SIZE_Y "USER_SPECIFIED_RENDER_SIZE_Y"
     IDS_RG_LOAD_EXT_LIST                "LOAD_EXT_LIST"
     IDS_RG_PGS_COLOR_TYPE               "PGS_COLOR_TYPE"
+    IDS_RG_SECONDARY_LANGUAGE_LIST      "SECONDARY_LANGUAGE_LIST"
     IDS_RP_MAX_BITMAP_COUNT             "MAX_BITMAP_COUNT"
     IDS_RG_RGB_CORRECTION               "RGB_CORRECTION"
     IDS_RG_SUPPORTED_VERSION "Supported Version"

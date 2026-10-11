@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "dualsubs_identity.h"
+
 #include <atlsync.h>
 #include "DirectVobSub.h"
 #include "../BaseVideoFilter/BaseVideoFilter.h"
@@ -31,7 +33,7 @@
 #include "SubRenderIntf.h"
 
 
-[uuid("db6974b5-9bd1-45f5-8462-27a88019b352")]
+[uuid(DUALSUBS_CLSID_CONSUMER_STR)]
 class XySubFilterConsumer
     : public CBaseVideoFilter
     , public CDirectVobSub

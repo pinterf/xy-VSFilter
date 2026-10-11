@@ -1,10 +1,9 @@
 ; xy_sub_filter_consumer.def : Declares the module parameters.
-
-LIBRARY      "xy_sub_filter_consumer.dll"
-
+; No LIBRARY statement: the output name is the identity-derived TargetName.
 EXPORTS
 	DllCanUnloadNow			PRIVATE
 	DllGetClassObject		PRIVATE
 	DllRegisterServer		PRIVATE
 	DllUnregisterServer		PRIVATE
-	XySubFilterConsumerConfiguration
+	; the identity-named configuration entry point is exported by a linker
+	; pragma in xy_sub_filter_consumer_dll.cpp (the .def cannot be preprocessed)

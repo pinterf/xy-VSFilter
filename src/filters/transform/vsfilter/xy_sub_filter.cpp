@@ -6,8 +6,13 @@
 #include "SubtitleInputPin2.h"
 #include "../../../subtitles/xy_bitmap.h"
 #include "../../../subtitles/hdmv_subtitle_provider.h"
+#include "../../../subtitles/TsSubtitleSource.h"
+#include "../../../subtitles/MatroskaSubtitleSource.h"
+#include "../../../subtitles/EmbeddedStreamEnum.h"
+#include "../../../subtitles/SSF.h"
 #include "../../../SubPic/SimpleSubPicProviderImpl.h"
 #include "../../../subpic/SimpleSubPicWrapper.h"
+#include "../../../subpic/MultiTrackSubRenderProvider.h"
 #include "../../../subpic/color_conv_table.h"
 
 #include "CAutoTiming.h"
@@ -53,7 +58,7 @@ const SubRenderOptionsImpl::OptionMap options[] =
 
 XySubFilter::XySubFilter( LPUNKNOWN punk, 
     HRESULT* phr, const GUID& clsid /*= __uuidof(XySubFilter)*/ )
-    : CBaseFilter(NAME("XySubFilter"), punk, &m_csFilter, clsid)
+    : CBaseFilter(NAME(DUALSUBS_FILTER_NAME), punk, &m_csFilter, clsid)
     , CDVS4XySubFilter(XyVobFilterOptions, &m_csFilter)
     , SubRenderOptionsImpl(::options, this)
     , m_curSubStream(NULL)
@@ -63,11 +68,12 @@ XySubFilter::XySubFilter( LPUNKNOWN punk,
     , m_last_requested(-1)
     , m_workaround_mpc_hc(false)
     , m_disconnect_entered(false)
+    , m_stood_down_owing_to_other_xy(false)
 {
     AFX_MANAGE_STATE(AfxGetStaticModuleState());
 
     XY_LOG_INFO(XY_LOG_VAR_2_STR(this));
-    m_xy_str_opt[STRING_NAME] = L"XySubFilter";
+    m_xy_str_opt[STRING_NAME] = DUALSUBS_W_FILTER_NAME;
     m_xy_str_opt[STRING_OUTPUT_LEVELS] = L"PC";
     m_filter_info_string = m_xy_str_opt[STRING_NAME];
 
@@ -149,6 +155,7 @@ XySubFilter::~XySubFilter()
         delete m_pSubtitleInputPin[i];
 
     m_sub_provider = NULL;
+    m_multi_tracker = NULL;
     ::DeleteSystray(&m_hSystrayThread, &m_tbid);
     _ASSERTE(_CrtCheckMemory());
 }
@@ -167,6 +174,7 @@ STDMETHODIMP XySubFilter::NonDelegatingQueryInterface(REFIID riid, void** ppv)
         QI(ISubRenderProvider)
         QI(ISubRenderFrame)
         QI(IXySubFilterGraphMutex)
+        QI(IMultiSubtitleTrackLoader)
         (riid==__uuidof(ISubRenderOptions)) ? GetInterface((ISubRenderProvider*)this, ppv) :
         __super::NonDelegatingQueryInterface(riid, ppv);
 }
@@ -277,7 +285,11 @@ STDMETHODIMP XySubFilter::JoinFilterGraph(IFilterGraph* pGraph, LPCWSTR pName)
                 return E_FAIL;
             }
         }
+        // Resolve the container path first so an embedded secondary can be
+        // opened while loading, and any auto-loaded stream picks it up.
+        UpdateMediaFileName(pGraph);
         LoadExternalSubtitle(pGraph);
+        LoadSecondarySubtitle(pGraph);
         return hr;
     }
     else
@@ -325,6 +337,15 @@ STDMETHODIMP XySubFilter::Pause()
         if (m_pSubStreams.GetCount()>0 || m_xy_int_opt[INT_LOAD_SETTINGS_LEVEL]==LOADLEVEL_ALWAYS)
         {
             hr = FindAndConnectConsumer(m_pGraph);
+            if (hr == S_FALSE && m_stood_down_owing_to_other_xy)
+            {
+                // Intentional stand-down (another Xy-family filter is active):
+                // keep the player alive, do not attempt to stream. The guard
+                // already logged the reason.
+                XY_LOG_INFO("Stood down; another Xy-family subtitle filter owns the consumer.");
+                m_filter_info_string.Format(L"%s (=> stood down)", m_xy_str_opt[STRING_NAME].GetString());
+                return CBaseFilter::Pause();
+            }
             if (FAILED(hr) || !m_consumer)
             {
                 m_filter_info_string.Format(L"%s (=> !!!)", m_xy_str_opt[STRING_NAME].GetString());
@@ -379,6 +400,43 @@ HRESULT XySubFilter::OnOptionChanged( unsigned field )
             }
         }
         m_context_id++;
+        break;
+    case STRING_FILE_NAME_SECONDARY:
+    case BOOL_DUAL_SUB_ENABLED:
+    case INT_SECONDARY_TOP_MARGIN:
+    case BOOL_SECONDARY_ALIGN_TOP:
+    case INT_SECONDARY_SCALE:
+    case INT_SECONDARY_OPACITY:
+    case INT_SECONDARY_Z_ORDER:
+    case INT_SECONDARY_VERTICAL:
+    case INT_PRIMARY_VERTICAL:
+    case INT_SECONDARY_EMBEDDED_PID:
+        // Rebuild the multi-tracker with the new secondary configuration; the
+        // primary is untouched, so this only costs a provider swap.
+        UpdateMultiTracker(this);
+        m_context_id++;
+        InvalidateSubtitle();
+        break;
+    case STRING_SECONDARY_LANGUAGE_LIST:
+        // A changed language list may make a different adjacent subtitle file
+        // eligible, so re-run the (independent) secondary auto-load first.
+        LoadSecondarySubtitle(m_pGraph);
+        UpdateMultiTracker(this);
+        m_context_id++;
+        InvalidateSubtitle();
+        break;
+    case BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER:
+        // The guard is exposed read/write so a player tool can force this filter
+        // to take the consumer; when it is switched back off, retry the
+        // connection we declined earlier.
+        if (!m_xy_bool_opt[field] && !m_consumer && m_pGraph && !m_fLoading)
+        {
+            m_stood_down_owing_to_other_xy = false;
+            if (FAILED(FindAndConnectConsumer(m_pGraph)))
+            {
+                XY_LOG_INFO("Re-connect attempt after stand-down did not succeed");
+            }
+        }
         break;
     case BOOL_OVERRIDE_PLACEMENT:
     case SIZE_PLACEMENT_PERC:
@@ -796,13 +854,14 @@ STDMETHODIMP XySubFilter::GetPages(CAUUID* pPages)
     XY_LOG_INFO(pPages);
     CheckPointer(pPages, E_POINTER);
 
-    pPages->cElems = 5;
+    pPages->cElems = 6;
     pPages->pElems = (GUID*)CoTaskMemAlloc(sizeof(GUID)*pPages->cElems);
 
     if(pPages->pElems == NULL) return E_OUTOFMEMORY;
 
     int i = 0;
     pPages->pElems[i++] = __uuidof(CXySubFilterMainPPage);
+    pPages->pElems[i++] = __uuidof(CXySubFilterDualPPage);
     pPages->pElems[i++] = __uuidof(CXySubFilterMorePPage);
     pPages->pElems[i++] = __uuidof(CXySubFilterTimingPPage);
     pPages->pElems[i++] = __uuidof(CXySubFilterPathsPPage);
@@ -1205,9 +1264,11 @@ STDMETHODIMP XySubFilter::RequestFrame( REFERENCE_TIME start, REFERENCE_TIME sto
         REFERENCE_TIME now = start; //NOTE: It seems that the physically right way is (start + stop) / 2, but...
         m_last_requested = now;
 
-        if(m_sub_provider)
+        if(m_multi_tracker)
         {
-            hr = m_sub_provider->RequestFrame(&sub_render_frame, now);
+            // N-track compositor: returns the primary frame directly when only
+            // one track is active, otherwise a merged multi-bitmap frame.
+            hr = m_multi_tracker->RequestFrame(&sub_render_frame, now);
             if (FAILED(hr))
             {
                 XY_LOG_ERROR("Failed to RequestFrame."<<XY_LOG_VAR_2_STR(hr));
@@ -1564,6 +1625,65 @@ void XySubFilter::SetRgbOutputLevel()
     }
 }
 
+// Builds a subtitle source for one external file, using the stock loader
+// cascade (text -> VobSub -> SSF -> SUP). Reusable for the primary enumeration
+// and for the secondary track, so the two paths can never drift apart.
+// Returns a referenced ISubStream, or NULL when no loader matched.
+template<class TLock>
+static CComPtr<ISubStream> CreateSubStreamFromFile(const CString& file_name, TLock* pLock
+    , CAtlList<CString>* pExtraFiles /*=NULL*/)
+{
+    CComPtr<ISubStream> pSubStream;
+
+    {
+        XY_AUTO_TIMING(TEXT("CRenderedTextSubtitle::Open"));
+        CAutoPtr<CRenderedTextSubtitle> pRTS(DEBUG_NEW CRenderedTextSubtitle(pLock));
+        if(pRTS && pRTS->Open(file_name, DEFAULT_CHARSET) && pRTS->GetStreamCount() > 0)
+        {
+            pSubStream = pRTS.Detach();
+            if (pExtraFiles)
+            {
+                pExtraFiles->AddTail(file_name + _T(".style"));
+            }
+        }
+    }
+
+    if(!pSubStream)
+    {
+        CAutoTiming t(TEXT("CVobSubFile::Open"), 0);
+        CAutoPtr<CVobSubFile> pVSF(DEBUG_NEW CVobSubFile(pLock));
+        if(pVSF && pVSF->Open(file_name) && pVSF->GetStreamCount() > 0)
+        {
+            pSubStream = pVSF.Detach();
+            if (pExtraFiles)
+            {
+                pExtraFiles->AddTail(file_name.Left(file_name.GetLength()-4) + _T(".sub"));
+            }
+        }
+    }
+
+    if(!pSubStream)
+    {
+        CAutoTiming t(TEXT("ssf::CRenderer::Open"), 0);
+        CAutoPtr<ssf::CRenderer> pSSF(DEBUG_NEW ssf::CRenderer(pLock));
+        if(pSSF && pSSF->Open(file_name) && pSSF->GetStreamCount() > 0)
+        {
+            pSubStream = pSSF.Detach();
+        }
+    }
+
+    if (!pSubStream)
+    {
+        CAutoPtr<SupFileSubtitleProvider> sup(DEBUG_NEW SupFileSubtitleProvider());
+        if (sup && sup->Open(file_name) && sup->GetStreamCount() > 0)
+        {
+            pSubStream = sup.Detach();
+        }
+    }
+
+    return pSubStream;
+}
+
 bool XySubFilter::Open()
 {
     XY_AUTO_TIMING(TEXT("XySubFilter::Open"));
@@ -1596,49 +1716,8 @@ bool XySubFilter::Open()
         if(m_frd.files.Find(ret[i].full_file_name))
             continue;
 
-        CComPtr<ISubStream> pSubStream;
+        CComPtr<ISubStream> pSubStream = CreateSubStreamFromFile(ret[i].full_file_name, &m_csFilter, &m_frd.files);
 
-        if(!pSubStream)
-        {
-            //            CAutoTiming t(TEXT("CRenderedTextSubtitle::Open"), 0);
-            XY_AUTO_TIMING(TEXT("CRenderedTextSubtitle::Open"));
-            CAutoPtr<CRenderedTextSubtitle> pRTS(DEBUG_NEW CRenderedTextSubtitle(&m_csFilter));
-            if(pRTS && pRTS->Open(ret[i].full_file_name, DEFAULT_CHARSET) && pRTS->GetStreamCount() > 0)
-            {
-                pSubStream = pRTS.Detach();
-                m_frd.files.AddTail(ret[i].full_file_name + _T(".style"));
-            }
-        }
-
-        if(!pSubStream)
-        {
-            CAutoTiming t(TEXT("CVobSubFile::Open"), 0);
-            CAutoPtr<CVobSubFile> pVSF(DEBUG_NEW CVobSubFile(&m_csFilter));
-            if(pVSF && pVSF->Open(ret[i].full_file_name) && pVSF->GetStreamCount() > 0)
-            {
-                pSubStream = pVSF.Detach();
-                m_frd.files.AddTail(ret[i].full_file_name.Left(ret[i].full_file_name.GetLength()-4) + _T(".sub"));
-            }
-        }
-
-        if(!pSubStream)
-        {
-            CAutoTiming t(TEXT("ssf::CRenderer::Open"), 0);
-            CAutoPtr<ssf::CRenderer> pSSF(DEBUG_NEW ssf::CRenderer(&m_csFilter));
-            if(pSSF && pSSF->Open(ret[i].full_file_name) && pSSF->GetStreamCount() > 0)
-            {
-                pSubStream = pSSF.Detach();
-            }
-        }
-
-        if (!pSubStream)
-        {
-            CAutoPtr<SupFileSubtitleProvider> sup(DEBUG_NEW SupFileSubtitleProvider());
-            if (sup && sup->Open(ret[i].full_file_name) && sup->GetStreamCount() > 0)
-            {
-                pSubStream = sup.Detach();
-            }
-        }
         if(pSubStream)
         {
             m_pSubStreams.AddTail(pSubStream);
@@ -1911,6 +1990,485 @@ void XySubFilter::SetSubtitle( ISubStream* pSubStream, bool fApplyDefStyle /*= t
     {
         m_sub_provider->Connect(this);
     }
+
+    UpdateMultiTracker(this);
+}
+
+// Splits 's' on 'sep' into 'out' (empty fields preserved).
+static void XySplitTokenW(const CString& s, WCHAR sep, std::vector<CString>& out)
+{
+    int start = 0;
+    for (;;)
+    {
+        int pos = s.Find(sep, start);
+        if (pos < 0)
+        {
+            out.push_back(s.Mid(start));
+            break;
+        }
+        out.push_back(s.Mid(start, pos - start));
+        start = pos + 1;
+    }
+}
+
+// One secondary track's resolved configuration.
+struct XySecondarySpec
+{
+    CString path;
+    WORD embedded_pid;   // 0 = external file; else container-embedded stream
+    bool embedded;       // true when 'embedded_pid' selects a stream
+    bool embedded_by_index;  // value is a 1-based list index, not a raw id
+    double scale;   // percent
+    int opacity;    // 0..255
+    int align;      // 0=as-is, 1=top, 2=bottom
+    int margin;     // px, with align 1/2
+    int z_order;    // paint order
+
+    XySecondarySpec() : embedded_pid(0), embedded(false), embedded_by_index(false), scale(100.0), opacity(255), align(1), margin(0), z_order(1) {}
+};
+
+static SubRenderTrack::VerticalAlign XyAlignFromInt(int v)
+{
+    switch (v)
+    {
+    case 1:  return SubRenderTrack::ALIGN_TOP;
+    case 2:  return SubRenderTrack::ALIGN_BOTTOM;
+    default: return SubRenderTrack::ALIGN_AS_IS;
+    }
+}
+
+// Parses the secondary file option. Entries are separated by ';' (preferred) or,
+// when no ';' is present, by ','. Each entry is a compact spec:
+//
+//     path[|scale[|opacity[|align[|margin[|z]]]]]
+//     pid:0x1201[|scale[|opacity[|align[|margin[|z]]]]]
+//
+// 'path' is an external subtitle file (existing behaviour). 'pid:<hex>' names
+// a container-embedded subtitle stream (Blu-ray/TS PGS or DVB) read straight
+// from the media file; it uses INT_SECONDARY_EMBEDDED_PID as the default when
+// written without an argument. The remaining fields fall back to the
+// single-value registry options (INT_SECONDARY_SCALE / _OPACITY / _VERTICAL /
+// _TOP_MARGIN / _Z_ORDER); 'z' additionally defaults to base_z + entry index so
+// a plain list keeps a stable, distinct paint order.
+static bool XyParseEmbeddedPid(const CString& token, WORD* pid)
+{
+    CString t = token;
+    t.Trim();
+    CString prefix = _T("pid:");
+    if (t.GetLength() <= prefix.GetLength() || t.Left(prefix.GetLength()).CompareNoCase(prefix) != 0)
+    {
+        return false;
+    }
+    CString num = t.Mid(prefix.GetLength());
+    num.Trim();
+    if (num.IsEmpty())
+    {
+        return false;
+    }
+    long v = wcstol(num, NULL, 16);
+    if (v <= 0 || v > 0x1FFF)
+    {
+        return false;
+    }
+    *pid = (WORD)v;
+    return true;
+}
+
+// 'embedded' selects an embedded subtitle stream without naming a raw PID/PG
+// order: the container interprets the value in its own terms. Two syntaxes map
+// here, and both containers honour them:
+//     'track:N'  - raw container id (MKV TrackNumber; TS/DVB pid when N <= 0x1FFF)
+//     'sub:N'    - 1-based index into the discovered embedded subtitle stream list
+// A bare 'embedded' / 'sub:' uses the first decodable stream (encoded as 0, the
+// same sentinel the loader already treats as "first decodable").
+static bool XyParseEmbeddedToken(const CString& token, WORD* value, bool* by_index)
+{
+    CString t = token;
+    t.Trim();
+    *by_index = false;
+
+    struct { const TCHAR* p; bool idx; } prefixes[] = {
+        { _T("track:"), false },
+        { _T("sub:"),   true  },
+    };
+    for (int k = 0; k < 2; k++)
+    {
+        CString prefix = prefixes[k].p;
+        if (t.GetLength() <= prefix.GetLength() ||
+            t.Left(prefix.GetLength()).CompareNoCase(prefix) != 0)
+        {
+            continue;
+        }
+        CString num = t.Mid(prefix.GetLength());
+        num.Trim();
+        long v = num.IsEmpty() ? 0 : wcstol(num, NULL, 10);
+        if (v < 0 || v > 0xFFFF)
+        {
+            return false;
+        }
+        *value = (WORD)v;
+        *by_index = prefixes[k].idx;
+        return true;
+    }
+    return false;
+}
+
+static void XyParseSecondaryList(const CString& list, int base_scale, int base_opacity,
+    int base_align, int base_margin, int base_z, int default_embedded_pid,
+    std::vector<XySecondarySpec>& out)
+{
+    CString trimmed = list;
+    trimmed.Trim();
+    if (trimmed.IsEmpty())
+    {
+        return;
+    }
+
+    std::vector<CString> entries;
+    if (trimmed.Find(_T(';')) >= 0)
+    {
+        XySplitTokenW(trimmed, _T(';'), entries);
+    }
+    else
+    {
+        XySplitTokenW(trimmed, _T(','), entries);
+    }
+
+    for (size_t i = 0; i < entries.size(); i++)
+    {
+        CString entry = entries[i];
+        entry.Trim();
+        if (entry.IsEmpty())
+        {
+            continue;
+        }
+
+        std::vector<CString> parts;
+        XySplitTokenW(entry, _T('|'), parts);
+
+        XySecondarySpec spec;
+        spec.path = parts[0];
+        spec.path.Trim();
+        if (spec.path.IsEmpty())
+        {
+            continue;
+        }
+
+        // 'pid:0x1201' (TS/BDMV raw PID), 'track:N' (container-native id) or
+        // 'sub:N' (1-based index into the discovered embedded list) selects an
+        // embedded stream; a bare 'pid:' / 'track:' / 'sub:' uses the default.
+        WORD embedded_val = 0;
+        bool embedded = false;
+        bool by_index = false;
+        if (spec.path.CompareNoCase(_T("pid:")) == 0)
+        {
+            embedded_val = (WORD)default_embedded_pid;
+            embedded = true;
+            if (embedded_val == 0)
+            {
+                continue; // no default configured: nothing to open
+            }
+        }
+        else if (XyParseEmbeddedPid(spec.path, &embedded_val))
+        {
+            embedded = true;
+        }
+        else if (XyParseEmbeddedToken(spec.path, &embedded_val, &by_index))
+        {
+            embedded = true;
+        }
+        spec.embedded_pid = embedded_val;
+        spec.embedded = embedded;
+        spec.embedded_by_index = by_index;
+        spec.scale = parts.size() > 1 && !parts[1].Trim().IsEmpty() ? _ttof(parts[1]) : (double)base_scale;
+        if (spec.scale <= 0)
+        {
+            spec.scale = base_scale > 0 ? base_scale : 100;
+        }
+        spec.opacity = parts.size() > 2 && !parts[2].Trim().IsEmpty() ? _ttoi(parts[2]) : base_opacity;
+        spec.opacity = spec.opacity < 0 ? 0 : (spec.opacity > 255 ? 255 : spec.opacity);
+        spec.align = parts.size() > 3 && !parts[3].Trim().IsEmpty() ? _ttoi(parts[3]) : base_align;
+        if (spec.align < 0 || spec.align > 2)
+        {
+            spec.align = base_align;
+        }
+        spec.margin = parts.size() > 4 && !parts[4].Trim().IsEmpty() ? _ttoi(parts[4]) : base_margin;
+        if (spec.margin < 0)
+        {
+            spec.margin = 0;
+        }
+        spec.z_order = parts.size() > 5 && !parts[5].Trim().IsEmpty() ? _ttoi(parts[5]) : base_z + (int)i;
+
+        out.push_back(spec);
+    }
+}
+
+// Builds/refreshes the N-track renderer around the primary provider and the
+// optional external secondary list. With dual-sub off (or no secondary
+// configured) the tracker holds a single track and RequestFrame passes the
+// primary frame straight through, so the stock path is unchanged.
+void XySubFilter::UpdateMultiTracker(ISubRenderProvider* pPrimary)
+{
+    CAutoLock cAutolock(&m_csFilter);
+
+    m_multi_tracker = NULL;
+
+    if (!m_sub_provider)
+    {
+        return; // no primary: nothing to compose
+    }
+
+    CComPtr<MultiTrackSubRenderProvider> tracker;
+    tracker = DEBUG_NEW MultiTrackSubRenderProvider();
+    if (!tracker)
+    {
+        return;
+    }
+    tracker->SetLoader(static_cast<IMultiSubtitleTrackLoader*>(this));
+
+    std::vector<XySecondarySpec> secondaries;
+    if (m_xy_bool_opt[BOOL_DUAL_SUB_ENABLED] && !m_xy_str_opt[STRING_FILE_NAME_SECONDARY].IsEmpty())
+    {
+        XyParseSecondaryList(m_xy_str_opt[STRING_FILE_NAME_SECONDARY]
+            , m_xy_int_opt[INT_SECONDARY_SCALE]
+            , m_xy_int_opt[INT_SECONDARY_OPACITY]
+            , m_xy_int_opt[INT_SECONDARY_VERTICAL]
+            , m_xy_int_opt[INT_SECONDARY_TOP_MARGIN]
+            , m_xy_int_opt[INT_SECONDARY_Z_ORDER]
+            , m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID]
+            , secondaries);
+    }
+
+    // A bare 'secondary_embedded_pid' (non-zero) with no secondary spec adds the
+    // container-embedded stream as the sole secondary, so the option alone is
+    // enough to turn the feature on. Default 0 keeps this off.
+    if (secondaries.empty()
+        && m_xy_bool_opt[BOOL_DUAL_SUB_ENABLED]
+        && m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID] > 0)
+    {
+        CString token;
+        token.Format(_T("pid:0x%04X"), m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID]);
+        XyParseSecondaryList(token
+            , m_xy_int_opt[INT_SECONDARY_SCALE]
+            , m_xy_int_opt[INT_SECONDARY_OPACITY]
+            , m_xy_int_opt[INT_SECONDARY_VERTICAL]
+            , m_xy_int_opt[INT_SECONDARY_TOP_MARGIN]
+            , m_xy_int_opt[INT_SECONDARY_Z_ORDER]
+            , m_xy_int_opt[INT_SECONDARY_EMBEDDED_PID]
+            , secondaries);
+    }
+
+    // Clamp to the container's capacity (the primary occupies slot 0).
+    int track_count = 1 + (int)secondaries.size();
+    if (track_count > MultiTrackSubRenderProvider::MAX_TRACK_COUNT)
+    {
+        XY_LOG_WARN("Requested "<<track_count<<" tracks, clamping to "
+            <<MultiTrackSubRenderProvider::MAX_TRACK_COUNT);
+        track_count = MultiTrackSubRenderProvider::MAX_TRACK_COUNT;
+        secondaries.resize(track_count - 1);
+    }
+
+    tracker->SetTrackCount(track_count);
+    tracker->SetTrackProvider(0, m_sub_provider);
+
+    // Primary placement: only touched when the user asks for it, so the default
+    // (AS_IS) keeps the frame hierarchy byte-for-byte identical.
+    {
+        SubRenderTrack::VerticalAlign primary_align =
+            XyAlignFromInt(m_xy_int_opt[INT_PRIMARY_VERTICAL]);
+        if (primary_align != SubRenderTrack::ALIGN_AS_IS)
+        {
+            tracker->SetTrackPlacement(0, primary_align, 0);
+        }
+    }
+
+    for (size_t i = 0; i < secondaries.size(); i++)
+    {
+        const XySecondarySpec& spec = secondaries[i];
+        const int index = (int)i + 1;
+
+        // Track N loads its own source: an external file through the injected
+        // loader (the same cascade used for the primary), or an embedded stream
+        // read straight from the media container.
+        tracker->SetTrackEnabled(index, true);
+        if (spec.embedded)
+        {
+            tracker->SetTrackEmbedded(index, m_media_file_path.GetString(), spec.embedded_pid,
+                spec.embedded_by_index
+                    ? IMultiSubtitleTrackLoader::EMBEDDED_INDEX
+                    : IMultiSubtitleTrackLoader::EMBEDDED_RAW);
+        }
+        else
+        {
+            tracker->SetTrackFile(index, spec.path.GetString());
+        }
+        tracker->SetTrackScale(index, spec.scale);
+        tracker->SetTrackOpacity(index, spec.opacity);
+        tracker->SetTrackZOrder(index, spec.z_order);
+        tracker->SetTrackPlacement(index, XyAlignFromInt(spec.align), spec.margin);
+    }
+
+    m_multi_tracker = tracker;
+    m_multi_tracker->Connect(this);
+}
+
+STDMETHODIMP XySubFilter::CreateTrackProviderFromFile(LPCWSTR file_path, IXySubRenderProvider** provider)
+{
+    CheckPointer(provider, E_POINTER);
+    *provider = NULL;
+    if (!file_path || !*file_path)
+    {
+        return E_INVALIDARG;
+    }
+
+    CComPtr<ISubStream> stream = CreateSubStreamFromFile(CString(file_path), &m_csFilter, NULL);
+    if (!stream)
+    {
+        return S_FALSE;
+    }
+
+    // Wrap exactly as the primary path does, so both sides speak
+    // IXySubRenderProvider.
+    IXySubRenderProvider* wrapped = NULL;
+    if (CComQIPtr<IXySubRenderProvider>(stream))
+    {
+        wrapped = CComQIPtr<IXySubRenderProvider>(stream).Detach();
+    }
+    else if (CComQIPtr<ISubPicProviderEx2>(stream))
+    {
+        wrapped = DEBUG_NEW XySubRenderProviderWrapper2(CComQIPtr<ISubPicProviderEx2>(stream), NULL);
+    }
+    else if (CComQIPtr<ISubPicProviderEx>(stream))
+    {
+        wrapped = DEBUG_NEW XySubRenderProviderWrapper(CComQIPtr<ISubPicProviderEx>(stream), NULL);
+    }
+    else
+    {
+        XY_LOG_WARN("Secondary subtitle stream is NOT supported");
+        return S_FALSE;
+    }
+
+    if (!wrapped)
+    {
+        return E_OUTOFMEMORY;
+    }
+    *provider = wrapped;
+    return S_OK;
+}
+
+STDMETHODIMP XySubFilter::CreateTrackProviderFromEmbedded(LPCWSTR media_path, WORD value,
+    EmbeddedSelectKind kind, IXySubRenderProvider** provider)
+{
+    CheckPointer(provider, E_POINTER);
+    *provider = NULL;
+    if (!media_path || !*media_path)
+    {
+        return E_INVALIDARG;
+    }
+
+    // Container-side source: pick the container by type, then read the subtitle
+    // stream straight out of the media file with the existing decoders.
+    if (IsMatroskaFile(media_path))
+    {
+        WORD track = value;
+        if (kind == EMBEDDED_INDEX && value > 0)
+        {
+            // 1-based index into the discovered embedded subtitle list.
+            CMatroskaSubtitleSource src;
+            if (!src.Open(media_path) || value > (WORD)src.GetSubtitleStreams().size())
+            {
+                return E_FAIL;
+            }
+            track = (WORD)src.GetSubtitleStreams()[value - 1].track_number;
+        }
+        return CreateMatroskaSubtitleProvider(media_path, track, provider);
+    }
+
+    // TS/BDMV: EMBEDDED_INDEX resolves to the requested subtitle stream's PID
+    // via the same enumeration the source itself uses; EMBEDDED_RAW is the PID.
+    WORD pid = value;
+    if (kind == EMBEDDED_INDEX && value > 0)
+    {
+        CTsSubtitleSource src;
+        REFERENCE_TIME in_pt = _I64_MAX, out_pt = _I64_MAX;
+        CString stream_path;
+        CString resolved_path(media_path);
+        ResolveBdmvPlaylist(media_path, stream_path, in_pt, out_pt);
+        if (!stream_path.IsEmpty())
+        {
+            resolved_path = stream_path;
+        }
+        if (!src.Open(resolved_path, in_pt, out_pt) ||
+            value > (WORD)src.GetSubtitleStreams().size())
+        {
+            return E_FAIL;
+        }
+        pid = src.GetSubtitleStreams()[value - 1].pid;
+    }
+    return CreateTsSubtitleProvider(media_path, pid, provider);
+}
+
+STDMETHODIMP XySubFilter::EnumerateEmbeddedStreams(LPCWSTR media_path,
+    std::vector<EmbeddedStreamInfo>* out)
+{
+    CheckPointer(out, E_POINTER);
+    out->clear();
+
+    // The property page has no direct access to the graph: a NULL/empty
+    // media_path means "the media of the current graph". Re-resolve it from the
+    // live graph now rather than trusting the value captured at join time: the
+    // graph may not have had its source filter yet when we joined, and the page
+    // can be opened at any point during playback.
+    CString media;
+    {
+        CAutoLock cAutolock(&m_csFilter);
+        media = (media_path && *media_path) ? CString(media_path) : CString(m_media_file_path);
+    }
+    if (media.IsEmpty() && m_pGraph)
+    {
+        UpdateMediaFileName(m_pGraph);
+        CAutoLock cAutolock(&m_csFilter);
+        media = m_media_file_path;
+    }
+    if (media.IsEmpty())
+    {
+        return S_FALSE;   // nothing playing / media path unknown: empty list
+    }
+
+    HRESULT hr = EnumerateEmbeddedStreamsFromMedia(media, out);
+    if (hr != S_OK)
+    {
+        XY_LOG_WARN(_T("Embedded enumeration: '")<<media<<_T("' yielded no list (hr=")
+            <<(int)hr<<_T(")"));
+    }
+    return hr;
+}
+
+// Resolves the media (container) file path once per graph, so the embedded
+// secondary source can open it. Mirrors LoadExternalSubtitle's enumeration.
+void XySubFilter::UpdateMediaFileName(IFilterGraph* pGraph)
+{
+    CAutoLock cAutolock(&m_csFilter);
+    m_media_file_path.Empty();
+    if (!pGraph)
+    {
+        return;
+    }
+    BeginEnumFilters(pGraph, pEF, pBF)
+    {
+        if (CComQIPtr<IFileSourceFilter> pFSF = pBF)
+        {
+            LPOLESTR fnw = NULL;
+            if (!pFSF || FAILED(pFSF->GetCurFile(&fnw, NULL)) || !fnw)
+            {
+                continue;
+            }
+            m_media_file_path = CStringW(fnw);
+            CoTaskMemFree(fnw);
+            break;
+        }
+    }
+    EndEnumFilters;
 }
 
 void XySubFilter::InvalidateSubtitle( REFERENCE_TIME rtInvalidate /*= -1*/, DWORD_PTR nSubtitleId /*= -1*/ )
@@ -1926,7 +2484,15 @@ void XySubFilter::InvalidateSubtitle( REFERENCE_TIME rtInvalidate /*= -1*/, DWOR
                 ASSERT(0);
                 XY_LOG_ERROR("New subtitle samples received after a request.");
             }
-            m_sub_provider->Invalidate(rtInvalidate);
+            // Invalidate both tracks (forwards to every track provider).
+            if (m_multi_tracker)
+            {
+                m_multi_tracker->Invalidate(rtInvalidate);
+            }
+            else
+            {
+                m_sub_provider->Invalidate(rtInvalidate);
+            }
             XY_LOG_INFO("Subtitles cleared in provider and consumer");
         }
     }
@@ -2337,6 +2903,198 @@ bool XySubFilter::LoadExternalSubtitle(IFilterGraph* pGraph)
     return fRet;
 }
 
+// Canonicalizes a language token (ISO 639-1, 639-2 or an English language
+// name) into a lowercase ISO 639-2 code, or empty when unrecognized.
+static CString XyCanonicalLang(const CString& s)
+{
+    CString t = s;
+    t.Trim();
+    t.MakeLower();
+    if (t.IsEmpty())
+    {
+        return _T("");
+    }
+
+    CStringA narrow(t);
+    if (t.GetLength() == 2)
+    {
+        CString c2 = ISO6391To6392(narrow);
+        if (!c2.IsEmpty())
+        {
+            return c2;
+        }
+    }
+    if (t.GetLength() == 3)
+    {
+        // ISO6392ToLanguage echoes the input back when unknown, so a differing
+        // result means the code is valid.
+        if (ISO6392ToLanguage(narrow).CompareNoCase(t) != 0)
+        {
+            return t;
+        }
+    }
+
+    return LanguageToISO6392(t);
+}
+
+// True when a configured token refers to the same language as the filename's
+// suffix (e.g. token "jpn" vs suffix "Japanese", "ja" or "jpn").
+static bool XyLanguageMatches(const CString& token, const CString& suffix)
+{
+    CString a = XyCanonicalLang(token);
+    if (a.IsEmpty())
+    {
+        return false;
+    }
+    CString b = XyCanonicalLang(suffix);
+    return !b.IsEmpty() && a == b;
+}
+
+bool XySubFilter::LoadSecondarySubtitle(IFilterGraph* pGraph)
+{
+    XY_LOG_INFO(pGraph);
+
+    CAutoLock cAutolock(&m_csFilter);
+
+    // Empty list => secondary auto-load disabled (stock behaviour).
+    CString lang_list = m_xy_str_opt[STRING_SECONDARY_LANGUAGE_LIST];
+    lang_list.Trim();
+    if (lang_list.IsEmpty())
+    {
+        return false;
+    }
+
+    // An explicitly configured secondary file always wins.
+    if (!m_xy_str_opt[STRING_FILE_NAME_SECONDARY].IsEmpty())
+    {
+        return false;
+    }
+
+    int level;
+    bool load_external, load_web, load_embedded;
+    if (FAILED(get_LoadSettings(&level, &load_external, &load_web, &load_embedded)))
+    {
+        return false;
+    }
+    if (level < 0 || level >= LOADLEVEL_COUNT || level == LOADLEVEL_DISABLED)
+    {
+        return false;
+    }
+    if (level == LOADLEVEL_ALWAYS)
+    {
+        load_external = true;
+    }
+    if (!load_external)
+    {
+        return false;
+    }
+
+    // Media file name, exactly like the primary auto-load resolves it.
+    CStringW fn;
+    BeginEnumFilters(pGraph, pEF, pBF)
+    {
+        if (CComQIPtr<IFileSourceFilter> pFSF = pBF)
+        {
+            LPOLESTR fnw = NULL;
+            if (!pFSF || FAILED(pFSF->GetCurFile(&fnw, NULL)) || !fnw)
+                continue;
+            fn = CString(fnw);
+            CoTaskMemFree(fnw);
+            break;
+        }
+    }
+    EndEnumFilters;
+
+    if (fn.IsEmpty() || wcsstr(fn, L"http://") || wcsstr(fn, L"mms://"))
+    {
+        return false;
+    }
+
+    // Reuse the existing scanner + extension list rather than a new one.
+    CAtlArray<CString> paths;
+    for (int i = 0; i < 10; i++)
+    {
+        CString tmp;
+        tmp.Format(IDS_RP_PATH, i);
+        CString path = theApp.GetProfileString(ResStr(IDS_R_DEFTEXTPATHES), tmp);
+        if (!path.IsEmpty()) paths.Add(path);
+    }
+
+    CAtlArray<SubFile> candidates;
+    GetSubFileNames(fn, paths, m_xy_str_opt[STRING_LOAD_EXT_LIST], candidates);
+    if (candidates.IsEmpty())
+    {
+        return false;
+    }
+
+    // Configured tokens (comma separated).
+    CAtlArray<CString> tokens;
+    {
+        CString rest = lang_list;
+        while (!rest.IsEmpty())
+        {
+            int sep = rest.Find(_T(','));
+            CString tok = sep < 0 ? rest : rest.Left(sep);
+            tok.Trim();
+            if (!tok.IsEmpty()) tokens.Add(tok);
+            if (sep < 0) break;
+            rest = rest.Mid(sep + 1);
+        }
+    }
+    if (tokens.IsEmpty())
+    {
+        return false;
+    }
+
+    // The primary stream's own file (when determinable) must not be picked as
+    // the secondary, or the same subtitle would be composed on top of itself.
+    CString primary_file;
+    if (CRenderedTextSubtitle* rts = dynamic_cast<CRenderedTextSubtitle*>(m_curSubStream))
+    {
+        primary_file = rts->m_path;
+        primary_file.Replace('\\', '/');
+        primary_file.MakeLower();
+    }
+
+    for (size_t i = 0; i < candidates.GetCount(); i++)
+    {
+        const SubFile& cand = candidates[i];
+        if (cand.extra_name.IsEmpty())
+        {
+            continue;
+        }
+
+        if (!primary_file.IsEmpty())
+        {
+            CString cf = cand.full_file_name;
+            cf.Replace('\\', '/');
+            cf.MakeLower();
+            if (cf == primary_file)
+            {
+                continue;
+            }
+        }
+
+        bool match = false;
+        for (size_t t = 0; t < tokens.GetCount() && !match; t++)
+        {
+            match = XyLanguageMatches(tokens[t], cand.extra_name);
+        }
+        if (!match)
+        {
+            continue;
+        }
+
+        XY_LOG_INFO(L"Secondary auto-load matched: "<<cand.full_file_name.GetString());
+        CStringW selected = cand.full_file_name;
+        XySetString(STRING_FILE_NAME_SECONDARY, (LPWSTR)(LPCWSTR)selected, selected.GetLength());
+        XySetBool(BOOL_DUAL_SUB_ENABLED, true);
+        return true;
+    }
+
+    return false;
+}
+
 HRESULT IsPinConnected(IPin *pPin, bool *pResult)
 {
     CComPtr<IPin> pTmp = NULL;
@@ -2453,6 +3211,36 @@ HRESULT XySubFilter::FindAndConnectConsumer(IFilterGraph* pGraph)
     CAutoLock cAutolock(&m_csFilter);
     if(pGraph)
     {
+        // Fail-soft coexistence guard. The join-time guard only covers a
+        // foreign Xy-family filter already present when we joined; this covers
+        // the opposite load order (the other filter became active after we
+        // joined). Right before we take exclusive use of the consumer we check
+        // again and, when configured to stand down, decline to connect instead
+        // of fighting over the consumer or tearing anything down.
+        if (m_xy_bool_opt[BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER])
+        {
+            CString another;
+            if (IsAnotherXySubFilterActive(pGraph, &another))
+            {
+                // Log once per process at WARN level; XY_LOG_ONCE is trace-only.
+                static bool stand_down_logged = false;
+                if (!stand_down_logged)
+                {
+                    stand_down_logged = true;
+                    XY_LOG_WARN(L"Another Xy-family subtitle filter is active in the graph ("
+                        <<another.GetString()<<L"); standing down, subtitles stay off. "
+                        L"Set the registry value " DUALSUBS_W_PROFILE_NAME L"\\General\\xy_standdown to 0 "
+                        L"to let this filter take over the consumer.");
+                }
+                m_stood_down_owing_to_other_xy = true;
+                {
+                    CAutoLock cConsumerLock(&m_csConsumer);
+                    m_consumer = NULL;
+                }
+                return S_FALSE;
+            }
+        }
+
         BeginEnumFilters(pGraph, pEF, pBF)
         {
             if(pBF != (IBaseFilter*)this)
@@ -2559,6 +3347,62 @@ HRESULT XySubFilter::FindAndConnectConsumer(IFilterGraph* pGraph)
         hr = E_INVALIDARG;
     }
     return hr;
+}
+
+bool XySubFilter::IsAnotherXySubFilterActive(IFilterGraph* pGraph, CString* who)
+{
+    if (!pGraph)
+    {
+        return false;
+    }
+
+    // One pass over the graph, stopping at the first foreign Xy-family filter.
+    // We are necessarily in the graph ourselves at this point, so skip "this"
+    // by pointer identity (no recursion, no consumer lookup).
+    bool found = false;
+    BeginEnumFilters(pGraph, pEF, pBF)
+    {
+        if (pBF == (IBaseFilter*)this)
+        {
+            continue;
+        }
+        if (!CComQIPtr<IXySubFilterGraphMutex>(pBF))
+        {
+            continue;
+        }
+
+        found = true;
+        if (who)
+        {
+            who->Empty();
+            // Prefer the human readable name the graph knows us by; a filter
+            // that has not been added under a name yet falls back to its CLSID.
+            CFilterInfo fi;
+            if (SUCCEEDED(pBF->QueryFilterInfo(&fi)) && fi.achName[0])
+            {
+                *who = fi.achName;
+            }
+            if (who->IsEmpty())
+            {
+                CLSID clsid = GUID_NULL;
+                if (SUCCEEDED(pBF->GetClassID(&clsid)))
+                {
+                    WCHAR guid[64];
+                    if (StringFromGUID2(clsid, guid, countof(guid)))
+                    {
+                        *who = guid;
+                    }
+                }
+            }
+            if (who->IsEmpty())
+            {
+                *who = L"<unknown Xy-family filter>";
+            }
+        }
+        break;
+    }
+    EndEnumFilters;
+    return found;
 }
 
 void XySubFilter::UpdateLanguageCount()

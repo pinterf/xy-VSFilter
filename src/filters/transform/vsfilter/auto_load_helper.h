@@ -1,4 +1,6 @@
 
+#include "dualsubs_identity.h"
+
 class XySubFilterAutoLoader;
 
 class XyAutoLoaderDummyInputPin: public CBaseInputPin
@@ -15,7 +17,7 @@ private:
     XySubFilterAutoLoader *m_filter;
 };
 
-[uuid("6b237877-902b-4c6c-92f6-e63169a5166c")]
+[uuid(DUALSUBS_CLSID_AUTOLOADER_STR)]
 class XySubFilterAutoLoader : public CBaseFilter
 {
 public:

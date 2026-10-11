@@ -12,3 +12,36 @@ ipch
 /src/filters/BaseClasses/*.asm
 /src/filters/transform/VSFilter/*.asm
 /.vs
+
+# staged distribution binaries
+dist/x64/
+dist/x86/
+
+# test build intermediates
+test/bin/
+vsfilter.log
+
+# build output dropped by project dirs (never commit)
+src/subtitles/bin/
+src/filters/transform/vsfilter/bin/
+
+# derived test media (regenerated locally; disc-derived .sup must not be published)
+dist/*.zip
+tests/media/*.mp4
+tests/media/*.mkv
+tests/media/*.sup
+
+# design notes / specs: internal reference only, not published
+specs/
+
+# scratch / temp test files (never commit)
+tests/media/tmp_*
+*.tmp
+
+# session/tooling output
+omp-session-*.html
+*.html
+
+# stray archives and unit-test build output
+*.zip
+test/unit_test/bin/

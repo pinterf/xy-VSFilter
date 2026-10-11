@@ -44,17 +44,21 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <TargetName>XySubFilter</TargetName>
+    <!-- Build output is the identity DLL name. Override DUALSUBS_UPSTREAM_IDENTITY
+         (0/1) on the MSBuild command line to reproduce upstream's XySubFilter.dll. -->
+    <DUALSUBS_UPSTREAM_IDENTITY Condition="'$(DUALSUBS_UPSTREAM_IDENTITY)'==''">0</DUALSUBS_UPSTREAM_IDENTITY>
+    <TargetName Condition="'$(DUALSUBS_UPSTREAM_IDENTITY)'=='1'">XySubFilter</TargetName>
+    <TargetName Condition="'$(DUALSUBS_UPSTREAM_IDENTITY)'!='1'">MultiSubFilter</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
       <ModuleDefinitionFile>xy_sub_filter.def</ModuleDefinitionFile>
     </Link>
     <ClCompile>
-      <PreprocessorDefinitions>XY_SUB_FILTER_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XY_SUB_FILTER_DLL;DUALSUBS_UPSTREAM_IDENTITY=$(DUALSUBS_UPSTREAM_IDENTITY);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>XY_SUB_FILTER_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XY_SUB_FILTER_DLL;DUALSUBS_UPSTREAM_IDENTITY=$(DUALSUBS_UPSTREAM_IDENTITY);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -96,6 +100,7 @@
     <ClInclude Include="DirectVobSubPropPage.h" />
     <ClInclude Include="IDirectVobSub.h" />
     <ClInclude Include="IDirectVobSubXy.h" />
+    <ClInclude Include="IMultiSubtitleTrackLoader.h" />
     <ClInclude Include="once_logger.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="StdAfx.h" />

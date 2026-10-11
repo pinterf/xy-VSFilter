@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include "dualsubs_identity.h"
+
 #include <dvdmedia.h>
 #include <wmcodecdsp.h>
 
@@ -1199,8 +1201,10 @@ DEFINE_GUID(CLSID_MPCShoutcastSource, 0x68F540E9, 0x766F, 0x44d2, 0xAB, 0x07, 0x
 // DirectVobSub || VSFilter (auto-loading version) - {9852A670-F845-491B-9BE6-EBD841B8A613}
 DEFINE_GUID(CLSID_VSFilter, 0x9852A670, 0xF845, 0x491B, 0x9B, 0xE6, 0xEB, 0xD8, 0x41, 0xB8, 0xA6, 0x13);
 
-// XySubFilter - {2DFCB782-EC20-4A7C-B530-4577ADB33F21}
-DEFINE_GUID(CLSID_XySubFilter, 0x2DFCB782, 0xEC20, 0x4A7C, 0xB5, 0x30, 0x45, 0x77, 0xAD, 0xB3, 0x3F, 0x21);
+// XySubFilter (fork: MultiSubFilter) - identity from include/dualsubs_identity.h
+// The symbol names stay CLSID_XySubFilter* so no caller changes; only the GUID
+// value is parameterised (DUALSUBS_UPSTREAM_IDENTITY flips it back upstream).
+DUALSUBS_DEFINE_GUID(CLSID_XySubFilter, tag_filter);
 
-// XySubFilterAutoLoader - {6B237877-902B-4C6C-92F6-E63169A5166C}
-DEFINE_GUID(CLSID_XySubFilter_AutoLoader, 0x6B237877, 0x902B, 0x4C6C, 0x92, 0xF6, 0xE6, 0x31, 0x69, 0xA5, 0x16, 0x6C);
+// XySubFilterAutoLoader (fork: MultiSubFilter auto-loader)
+DUALSUBS_DEFINE_GUID(CLSID_XySubFilter_AutoLoader, tag_autoloader);

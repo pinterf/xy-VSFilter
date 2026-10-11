@@ -58,12 +58,14 @@
     <ClCompile Include="color_conv_table.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="CompositeSubRenderFrame.cpp" />
     <ClCompile Include="CoordGeom.cpp" />
     <ClCompile Include="CRect2.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="DX9SubPic.cpp" />
     <ClCompile Include="MemSubPic.cpp" />
+    <ClCompile Include="MultiTrackSubRenderProvider.cpp" />
     <ClCompile Include="PooledSubPic.cpp">
       <PrecompiledHeader>NotUsing</PrecompiledHeader>
     </ClCompile>
@@ -84,6 +86,7 @@
   <ItemGroup>
     <ClInclude Include="alpha_blender.h" />
     <ClInclude Include="color_conv_table.h" />
+    <ClInclude Include="CompositeSubRenderFrame.h" />
     <ClInclude Include="CoordGeom.h" />
     <ClInclude Include="CRect2.h" />
     <ClInclude Include="DX9SubPic.h" />
@@ -91,6 +94,7 @@
     <ClInclude Include="ISubPic.h" />
     <ClInclude Include="ISubRender.h" />
     <ClInclude Include="MemSubPic.h" />
+    <ClInclude Include="MultiTrackSubRenderProvider.h" />
     <ClInclude Include="PooledSubPic.h" />
     <ClInclude Include="SimpleSubpicImpl.h" />
     <ClInclude Include="SimpleSubPicProviderImpl.h" />

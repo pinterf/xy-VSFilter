@@ -59,19 +59,20 @@ const AMOVIESETUP_PIN sudpPin2 = {L"Input", FALSE, FALSE, TRUE, FALSE, &CLSID_NU
 /*const*/ AMOVIESETUP_FILTER sudFilter[] =
 {
      /* merit should larger than InternalScriptRenderer */
-    {&__uuidof(XySubFilter), L"XySubFilter", MERIT_PREFERRED+2, countof(sudpPins), sudpPins},
-    {&__uuidof(XySubFilterAutoLoader), L"XySubFilterAutoLoader", 0xffffffff, 1, &sudpPin2}
+    {&__uuidof(XySubFilter), DUALSUBS_W_FILTER_NAME, MERIT_PREFERRED+2, countof(sudpPins), sudpPins},
+    {&__uuidof(XySubFilterAutoLoader), DUALSUBS_W_FILTER_NAME L"AutoLoader", 0xffffffff, 1, &sudpPin2}
 };
 
 CFactoryTemplate g_Templates[] =
 {
     {sudFilter[0].strName, sudFilter[0].clsID, CreateInstance<XySubFilter>, NULL, &sudFilter[0]},
     {sudFilter[1].strName, sudFilter[1].clsID, CreateInstance<XySubFilterAutoLoader>, NULL, &sudFilter[1]},
-    {L"XySubFilterMainPPage", &__uuidof(CXySubFilterMainPPage), CreateInstance<CXySubFilterMainPPage>},
-    {L"XySubFilterMorePPage", &__uuidof(CXySubFilterMorePPage), CreateInstance<CXySubFilterMorePPage>},
-    {L"XySubFilterTimingPPage", &__uuidof(CXySubFilterTimingPPage), CreateInstance<CXySubFilterTimingPPage>},
-    {L"XySubFilterPathsPPage", &__uuidof(CXySubFilterPathsPPage), CreateInstance<CXySubFilterPathsPPage>},
-    {L"XySubFilterAboutPPage", &__uuidof(CXySubFilterAboutPPage), CreateInstance<CXySubFilterAboutPPage>},
+    {DUALSUBS_PAGE_NAME(L"MainPPage"), &__uuidof(CXySubFilterMainPPage), CreateInstance<CXySubFilterMainPPage>},
+    {DUALSUBS_PAGE_NAME(L"DualPPage"), &__uuidof(CXySubFilterDualPPage), CreateInstance<CXySubFilterDualPPage>},
+    {DUALSUBS_PAGE_NAME(L"MorePPage"), &__uuidof(CXySubFilterMorePPage), CreateInstance<CXySubFilterMorePPage>},
+    {DUALSUBS_PAGE_NAME(L"TimingPPage"), &__uuidof(CXySubFilterTimingPPage), CreateInstance<CXySubFilterTimingPPage>},
+    {DUALSUBS_PAGE_NAME(L"PathsPPage"), &__uuidof(CXySubFilterPathsPPage), CreateInstance<CXySubFilterPathsPPage>},
+    {DUALSUBS_PAGE_NAME(L"AboutPPage"), &__uuidof(CXySubFilterAboutPPage), CreateInstance<CXySubFilterAboutPPage>},
 };
 
 int g_cTemplates = countof(g_Templates);
@@ -90,7 +91,11 @@ STDAPI DllUnregisterServer()
     return AMovieDllRegisterServer2(FALSE);
 }
 
-void CALLBACK XySubFilterConfiguration(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+// The .def file cannot be preprocessed, so export this under the identity name
+// with a linker pragma instead (see DUALSUBS_EXPORT_PRAGMA). extern "C" keeps
+// the internal symbol name undecorated so the pragma matches on every arch.
+#pragma comment(linker, DUALSUBS_EXPORT_PRAGMA(DUALSUBS_CONFIG_EXPORT))
+extern "C" void CALLBACK DUALSUBS_CONFIG_EXPORT(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
     if(FAILED(::CoInitialize(0))) return;
 

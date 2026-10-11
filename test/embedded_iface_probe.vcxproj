@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{93DA8184-8592-4941-8BDB-DF1D1CE7AB88}</ProjectGuid>
+    <RootNamespace>embedded_iface_probe</RootNamespace>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <Import Project="..\src\configuration.props" />
+  <PropertyGroup Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Static</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)'=='Release'" Label="Configuration">
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <UseOfAtl>Static</UseOfAtl>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="PropertySheets">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+    <Import Project="..\src\common.props" />
+  </ImportGroup>
+  <PropertyGroup>
+    <OutDir>$(SolutionDir)bin\lib_$(VisualStudioVersion)\$(Platform)\</OutDir>
+    <TargetName>embedded_iface_probe</TargetName>
+    <IncludePath>$(SolutionDir)src\subtitles;$(SolutionDir)src\thirdparty\boost_lib\;$(SolutionDir)src\subpic\;$(SolutionDir)src\filters\transform\vsfilter\;$(SolutionDir)src\filters\BaseClasses;$(SolutionDir)src\DSUtil;$(SolutionDir)src\thirdparty\log4cplus\include\;$(SolutionDir)include\;$(IncludePath)</IncludePath>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <Link>
+      <AdditionalLibraryDirectories>$(OutDir)Release;$(OutDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalDependencies Condition="'$(Configuration)'=='Release'">subtitlesR.lib;subpicR.lib;strmbaseR.lib;dsutilR.lib;log4cplus_staticRU.lib;delayimp.lib;quartz.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <SubSystem>Console</SubSystem>
+    </Link>
+    <ClCompile>
+      <PrecompiledHeader>NotUsing</PrecompiledHeader>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="embedded_iface_probe.cpp" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

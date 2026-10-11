@@ -63,16 +63,16 @@ const AMOVIESETUP_PIN sudpPins[] =
 
 /*const*/ AMOVIESETUP_FILTER sudFilter[] =
 {
-    {&__uuidof(XySubFilterConsumer), L"XySubFilterConsumer", MERIT_DO_NOT_USE, countof(sudpPins), sudpPins},
+    {&__uuidof(XySubFilterConsumer), DUALSUBS_W_FILTER_NAME L"Consumer", MERIT_DO_NOT_USE, countof(sudpPins), sudpPins},
 };
 
 CFactoryTemplate g_Templates[] =
 {
     {sudFilter[0].strName, sudFilter[0].clsID, CreateInstance<XySubFilterConsumer>, NULL, &sudFilter[0]},
-    {L"XySubFilterConsumerGeneralPPage", &__uuidof(CXySubFilterConsumerGeneralPPage), CreateInstance<CXySubFilterConsumerGeneralPPage>},
-    {L"XySubFilterConsumerMiscPPage", &__uuidof(CXySubFilterConsumerMiscPPage), CreateInstance<CXySubFilterConsumerMiscPPage>},
-    {L"XySubFilterConsumerColorPPage", &__uuidof(CXySubFilterConsumerColorPPage), CreateInstance<CXySubFilterConsumerColorPPage>},
-    {L"XySubFilterConsumerAboutPPage", &__uuidof(CXySubFilterConsumerAboutPPage), CreateInstance<CXySubFilterConsumerAboutPPage>},
+    {DUALSUBS_PAGE_NAME(L"ConsumerGeneralPPage"), &__uuidof(CXySubFilterConsumerGeneralPPage), CreateInstance<CXySubFilterConsumerGeneralPPage>},
+    {DUALSUBS_PAGE_NAME(L"ConsumerMiscPPage"), &__uuidof(CXySubFilterConsumerMiscPPage), CreateInstance<CXySubFilterConsumerMiscPPage>},
+    {DUALSUBS_PAGE_NAME(L"ConsumerColorPPage"), &__uuidof(CXySubFilterConsumerColorPPage), CreateInstance<CXySubFilterConsumerColorPPage>},
+    {DUALSUBS_PAGE_NAME(L"ConsumerAboutPPage"), &__uuidof(CXySubFilterConsumerAboutPPage), CreateInstance<CXySubFilterConsumerAboutPPage>},
 };
 
 int g_cTemplates = countof(g_Templates);
@@ -91,7 +91,11 @@ STDAPI DllUnregisterServer()
     return AMovieDllRegisterServer2(FALSE);
 }
 
-void CALLBACK XySubFilterConsumerConfiguration(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
+// The .def file cannot be preprocessed, so export this under the identity name
+// with a linker pragma instead (see DUALSUBS_EXPORT_PRAGMA). extern "C" keeps
+// the internal symbol name undecorated so the pragma matches on every arch.
+#pragma comment(linker, DUALSUBS_EXPORT_PRAGMA(DUALSUBS_CONSUMER_CONFIG_EXPORT))
+extern "C" void CALLBACK DUALSUBS_CONSUMER_CONFIG_EXPORT(HWND hwnd, HINSTANCE hinst, LPSTR lpszCmdLine, int nCmdShow)
 {
     if(FAILED(::CoInitialize(0))) return;
 

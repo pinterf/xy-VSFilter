@@ -80,12 +80,12 @@ const REFERENCE_TIME DEFAULT_FRAME_RATE = 10000000.0/25;
 
 XySubFilterConsumer::XySubFilterConsumer(LPUNKNOWN punk, HRESULT* phr, const GUID& clsid)
     : CDirectVobSub(XyConsumerVobFilterOptions, &m_csSubLock)
-    , CBaseVideoFilter(NAME("XySubFilterConsumer"), punk, phr, clsid)
+    , CBaseVideoFilter(NAME(DUALSUBS_FILTER_NAME "Consumer"), punk, phr, clsid)
     , m_fMSMpeg4Fix(false)
     , SubRenderOptionsImpl(::options, this)
 {
     XY_LOG_INFO("Construct XySubFilterConsumer");
-    m_xy_str_opt[STRING_NAME] = L"XySubFilterConsumer";
+    m_xy_str_opt[STRING_NAME] = DUALSUBS_W_FILTER_NAME L"Consumer";
     m_xy_ulonglong_opt[ULONGLOG_FRAME_RATE] = DEFAULT_FRAME_RATE;
 
     // and then, anywhere you need it:
@@ -429,10 +429,10 @@ STDMETHODIMP XySubFilterConsumer::QueryFilterInfo(FILTER_INFO* pInfo)
     ValidateReadWritePtr(pInfo, sizeof(FILTER_INFO));
 
     if(!get_Forced()) {
-        swprintf_s(pInfo->achName, L"XySubFilterConsumer (merit:0x%x)", CONSUMRE_MERIT);
+        swprintf_s(pInfo->achName, DUALSUBS_W_FILTER_NAME L"Consumer (merit:0x%x)", CONSUMRE_MERIT);
     }
     else {
-        swprintf_s(pInfo->achName, L"XySubFilterConsumer (merit:0x%x|forced loading)", CONSUMRE_MERIT);
+        swprintf_s(pInfo->achName, DUALSUBS_W_FILTER_NAME L"Consumer (merit:0x%x|forced loading)", CONSUMRE_MERIT);
     }
     if(pInfo->pGraph = m_pGraph) m_pGraph->AddRef();
 

@@ -59,6 +59,22 @@ namespace DirectVobSubXyOptions
         STRING_PGS_YUV_MATRIX,//BT601,BT709,GUESS(default)
         STRING_FILE_NAME,
 
+        // Dual/multi-track (fork addition). The secondary entry is a list of one
+        // or more external subtitle files, each independently composed on top of
+        // the primary (see MultiTrackSubRenderProvider).
+        STRING_FILE_NAME_SECONDARY,
+        BOOL_DUAL_SUB_ENABLED,
+        INT_SECONDARY_TOP_MARGIN,
+        BOOL_SECONDARY_ALIGN_TOP, // legacy: superseded by INT_SECONDARY_VERTICAL
+        INT_SECONDARY_SCALE,      // percent, 100 == identity
+        INT_SECONDARY_OPACITY,    // 0..255, 255 == identity
+        INT_SECONDARY_Z_ORDER,    // paint order, higher drawn later/on top
+        INT_SECONDARY_VERTICAL,   // 0=as-is, 1=top, 2=bottom
+        INT_PRIMARY_VERTICAL,     // 0=as-is, 1=top, 2=bottom (0 keeps stock path)
+        // Container-side secondary: pick an embedded subtitle stream out of the
+        // media file itself (TS/BDMV PGS/DVB) by PID. 0 = off (stock path).
+        INT_SECONDARY_EMBEDDED_PID,
+
         STRING_NAME,
         STRING_VERSION,
         STRING_YUV_MATRIX,
@@ -146,6 +162,20 @@ namespace DirectVobSubXyOptions
         void_AdviseSubClock,
 
         BOOL_ALLOW_MOVING,
+
+        // Comma-separated ISO 639-1/639-2 codes (English language names are also
+        // accepted). When set, an external subtitle file next to the media whose
+        // language suffix (e.g. "movie.English.srt" -> "English") matches one of
+        // these entries is auto-loaded as the secondary track. Empty (the
+        // default) disables secondary auto-load, preserving stock behaviour.
+        STRING_SECONDARY_LANGUAGE_LIST,
+
+        // Coexistence guard (fork addition). When true (the default) this filter
+        // stands down - logs once, does not connect to the subtitle consumer and
+        // returns S_FALSE - if another Xy-family subtitle filter is already
+        // active in the graph (stock XySubFilter or another copy of this fork).
+        // Set to false to force this filter to take over the consumer anyway.
+        BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER,
 
         OPTION_COUNT
     };
@@ -257,9 +287,23 @@ namespace DirectVobSubXyOptions
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_PGS_YUV_MATRIX},
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_FILE_NAME},
 
+        {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_FILE_NAME_SECONDARY},
+        {XyOptionsImpl::OPTION_TYPE_BOOL  , XyOptionsImpl::OPTION_MODE_RW, BOOL_DUAL_SUB_ENABLED},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_TOP_MARGIN},
+        {XyOptionsImpl::OPTION_TYPE_BOOL  , XyOptionsImpl::OPTION_MODE_RW, BOOL_SECONDARY_ALIGN_TOP},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_SCALE},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_OPACITY},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_Z_ORDER},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_VERTICAL},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_PRIMARY_VERTICAL},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_EMBEDDED_PID},
+
+        {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_SECONDARY_LANGUAGE_LIST},
+
+        {XyOptionsImpl::OPTION_TYPE_BOOL  , XyOptionsImpl::OPTION_MODE_RW, BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER},
+
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_READ, STRING_NAME},
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_READ, STRING_VERSION},
-
         {XyOptionsImpl::OPTION_TYPE_BIN   , XyOptionsImpl::OPTION_MODE_RW, BIN_OUTPUT_COLOR_FORMAT},
         {XyOptionsImpl::OPTION_TYPE_BIN   , XyOptionsImpl::OPTION_MODE_RW, BIN_INPUT_COLOR_FORMAT},
 
@@ -358,6 +402,21 @@ namespace DirectVobSubXyOptions
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_PGS_YUV_RANGE},
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_PGS_YUV_MATRIX},
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_FILE_NAME},
+
+        {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_FILE_NAME_SECONDARY},
+        {XyOptionsImpl::OPTION_TYPE_BOOL  , XyOptionsImpl::OPTION_MODE_RW, BOOL_DUAL_SUB_ENABLED},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_TOP_MARGIN},
+        {XyOptionsImpl::OPTION_TYPE_BOOL  , XyOptionsImpl::OPTION_MODE_RW, BOOL_SECONDARY_ALIGN_TOP},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_SCALE},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_OPACITY},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_Z_ORDER},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_VERTICAL},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_PRIMARY_VERTICAL},
+        {XyOptionsImpl::OPTION_TYPE_INT   , XyOptionsImpl::OPTION_MODE_RW, INT_SECONDARY_EMBEDDED_PID},
+
+        {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_RW, STRING_SECONDARY_LANGUAGE_LIST},
+
+        {XyOptionsImpl::OPTION_TYPE_BOOL  , XyOptionsImpl::OPTION_MODE_RW, BOOL_STAND_DOWN_WHEN_ANOTHER_XY_FILTER},
 
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_READ, STRING_NAME},
         {XyOptionsImpl::OPTION_TYPE_STRING, XyOptionsImpl::OPTION_MODE_READ, STRING_VERSION},

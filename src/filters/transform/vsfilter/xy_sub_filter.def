@@ -1,10 +1,11 @@
 ; xy_sub_filter.def : Declares the module parameters.
-
-LIBRARY      "XySubFilter.dll"
+; No LIBRARY statement: the output name is the identity-derived TargetName
+; (see xy_sub_filter.vcxproj), and the .def cannot be preprocessed.
 
 EXPORTS
 	DllCanUnloadNow			PRIVATE
 	DllGetClassObject		PRIVATE
 	DllRegisterServer		PRIVATE
 	DllUnregisterServer		PRIVATE
-	XySubFilterConfiguration
+	; the identity-named configuration entry point is exported by a linker
+	; pragma in xy_sub_filter_dll.cpp (the .def cannot be preprocessed)

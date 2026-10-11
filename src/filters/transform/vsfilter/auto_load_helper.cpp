@@ -35,7 +35,7 @@ HRESULT XyAutoLoaderDummyInputPin::CheckMediaType( const CMediaType * mt)
 
 XySubFilterAutoLoader::XySubFilterAutoLoader( LPUNKNOWN punk, HRESULT* phr
     , const GUID& clsid /*= __uuidof(XySubFilterAutoLoader)*/ )
-    : CBaseFilter(NAME("XySubFilterAutoLoader"), punk, &m_pLock, clsid)
+    : CBaseFilter(NAME(DUALSUBS_FILTER_NAME "AutoLoader"), punk, &m_pLock, clsid)
 {
     m_pin = DEBUG_NEW XyAutoLoaderDummyInputPin(this, &m_pLock, phr, NULL);
 
@@ -140,7 +140,7 @@ STDMETHODIMP XySubFilterAutoLoader::QueryFilterInfo( FILTER_INFO* pInfo )
     HRESULT hr = __super::QueryFilterInfo(pInfo);
     if (SUCCEEDED(hr))
     {
-        wcscpy_s(pInfo->achName, countof(pInfo->achName)-1, L"XySubFilterAutoLoader");
+        wcscpy_s(pInfo->achName, countof(pInfo->achName)-1, DUALSUBS_W_FILTER_NAME L"AutoLoader");
     }
     return hr;
 }
@@ -311,7 +311,7 @@ HRESULT XySubFilterAutoLoader::CheckInput( const CMediaType * mt )
                     XY_LOG_ERROR("Failed to set option BOOL_GET_RID_OF_VSFILTER");
                     return E_FAIL;
                 }
-                hr = m_pGraph->AddFilter(filter, L"XySubFilter(AutoLoad)");
+                hr = m_pGraph->AddFilter(filter, DUALSUBS_W_FILTER_NAME L"(AutoLoad)");
                 if (FAILED(hr))
                 {
                     XY_LOG_ERROR("Failed to AddFilter. "<<XY_LOG_VAR_2_STR(xy_sub_filter)<<XY_LOG_VAR_2_STR(hr));

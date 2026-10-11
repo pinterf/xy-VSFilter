@@ -44,17 +44,20 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup>
-    <TargetName>xy_sub_filter_consumer</TargetName>
+    <!-- See xy_sub_filter.vcxproj: DUALSUBS_UPSTREAM_IDENTITY switches identity. -->
+    <DUALSUBS_UPSTREAM_IDENTITY Condition="'$(DUALSUBS_UPSTREAM_IDENTITY)'==''">0</DUALSUBS_UPSTREAM_IDENTITY>
+    <TargetName Condition="'$(DUALSUBS_UPSTREAM_IDENTITY)'=='1'">xy_sub_filter_consumer</TargetName>
+    <TargetName Condition="'$(DUALSUBS_UPSTREAM_IDENTITY)'!='1'">MultiSubFilterConsumer</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <Link>
       <ModuleDefinitionFile>xy_sub_filter_consumer.def</ModuleDefinitionFile>
     </Link>
     <ClCompile>
-      <PreprocessorDefinitions>XY_SUB_FILTER_CONSUMER_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XY_SUB_FILTER_CONSUMER_DLL;DUALSUBS_UPSTREAM_IDENTITY=$(DUALSUBS_UPSTREAM_IDENTITY);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <ResourceCompile>
-      <PreprocessorDefinitions>XY_SUB_FILTER_CONSUMER_DLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>XY_SUB_FILTER_CONSUMER_DLL;DUALSUBS_UPSTREAM_IDENTITY=$(DUALSUBS_UPSTREAM_IDENTITY);%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ResourceCompile>
   </ItemDefinitionGroup>
   <ItemGroup>

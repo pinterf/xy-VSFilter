@@ -56,7 +56,7 @@ CVSFilterApp::CVSFilterApp()
 
 #if (defined XY_SUB_FILTER_DLL)
     free((void*)m_pszProfileName);
-    m_pszProfileName = _tcsdup(_T("XySubFilter"));
+    m_pszProfileName = _tcsdup(_T(DUALSUBS_PROFILE_NAME));
 #endif
 }
 
@@ -67,10 +67,10 @@ BOOL CVSFilterApp::InitInstance()
 	if(!CWinApp::InitInstance())
 		return FALSE;
 
-	SetRegistryKey(_T("Gabest"));
+	SetRegistryKey(_T(DUALSUBS_REG_VENDOR_NAME));
 #if (defined XY_SUB_FILTER_DLL)
     free((void*)m_pszProfileName);
-    m_pszProfileName = _tcsdup(_T("XySubFilter"));//restore m_pszProfileName overwrite by SetRegistryKey
+    m_pszProfileName = _tcsdup(_T(DUALSUBS_PROFILE_NAME));//restore m_pszProfileName overwrite by SetRegistryKey
 #endif
 
 	DllEntryPoint(AfxGetInstanceHandle(), DLL_PROCESS_ATTACH, 0); // "DllMain" of the dshow baseclasses

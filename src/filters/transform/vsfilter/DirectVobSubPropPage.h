@@ -21,9 +21,12 @@
 
 #pragma once
 
+#include "dualsubs_identity.h"
+
 #include <afxcmn.h>
 #include "IDirectVobSub.h"
 #include "IDirectVobSubXy.h"
+#include "IMultiSubtitleTrackLoader.h"
 
 class CDVSBasePPage : public CBasePropertyPage
 {
@@ -35,6 +38,9 @@ public:
 protected:
 	CComQIPtr<IDirectVobSub2> m_pDirectVobSub;
     CComQIPtr<IXyOptions> m_pDirectVobSubXy;
+    // The filter also exposes the container-side loader; used by the Dual
+    // Subtitles page to list the current media's embedded subtitle streams.
+    CComQIPtr<IMultiSubtitleTrackLoader> m_pTrackLoader;
 
 	virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam) {return(false);}
 	virtual void UpdateObjectData(bool fSave) {}
@@ -59,6 +65,15 @@ private:
 
 protected:
 	void BindControl(UINT id, CWnd& control);
+
+	// Set an edit control's text only when it actually differs.
+	//
+	// UpdateControlData(false) runs on EVERY instant-apply (it is reached via
+	// OnApplyChanges -> OnActivate), i.e. on each EN_CHANGE while typing.
+	// SetWindowText unconditionally would reset the caret to position 0 on
+	// every keystroke, making text fields unusable. Comparing first keeps the
+	// caret where the user left it while still refreshing on real changes.
+	static void SetEditTextIfChanged(CWnd& wnd, const CString& text);
 };
 
 [uuid("60765CF5-01C2-4ee7-A44B-C791CF25FEA0")]
@@ -246,7 +261,7 @@ public:
 //
 // XySubFilter
 //
-[uuid("4514EFD4-E09B-4995-9668-143F12994FE7")]
+[uuid(DUALSUBS_CLSID_MAINPAGE_STR)]
 class CXySubFilterMainPPage : public CDVSBasePPage
 {
     void FreeLangs(), AllocLangs(int nLangs);
@@ -282,7 +297,7 @@ public:
     virtual ~CXySubFilterMainPPage();
 };
 
-[uuid("E7946C91-1083-4F0E-AC45-5CF6BE7DB4C7")]
+[uuid(DUALSUBS_CLSID_MOREPAGE_STR)]
 class CXySubFilterMorePPage : public CDVSBasePPage
 {
     int m_overlay_cache_max_item_num, m_overlay_no_blur_cache_max_item_num, m_path_cache_max_item_num, 
@@ -315,65 +330,107 @@ public:
     CXySubFilterMorePPage(LPUNKNOWN lpunk, HRESULT* phr);
 };
 
-[uuid("1438A8B4-E8AF-4A81-BCA8-970751A9EE82")]
+[uuid(DUALSUBS_CLSID_DUALPAGE_STR)]
+class CXySubFilterDualPPage : public CDVSBasePPage
+{
+    bool m_fDualSubEnabled;
+    CString m_secondaryFile;
+    int m_secondaryScale, m_secondaryOpacity, m_secondaryVertical, m_secondaryTopMargin, m_secondaryZOrder;
+    int m_primaryVertical;
+    CString m_secondaryLanguageList;
+
+    CButton m_dual_sub_enabled;
+    CEdit m_secondary_file;
+    CButton m_secondary_browse;
+    CSpinButtonCtrl m_secondary_scale, m_secondary_opacity, m_secondary_top_margin, m_secondary_z_order;
+    CComboBox m_secondary_vertical, m_primary_vertical;
+    CEdit m_secondary_lang_list;
+    CButton m_secondary_reload;
+
+    // Embedded-stream picker: list of the current media's embedded subtitle
+    // streams (label + raw id), a Refresh button and a note line.
+    CComboBox m_secondary_embedded_list;
+    CButton m_secondary_embedded_refresh;
+    CStatic m_secondary_embedded_note;
+    std::vector<EmbeddedStreamInfo> m_embedded_streams;
+    // Enumeration opens the media (header scan), so it is done once when the
+    // page is first shown and on explicit Refresh - not on every instant-apply.
+    bool m_embedded_populated;
+protected:
+    virtual bool OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam);
+    virtual void UpdateControlData(bool fSave);
+    virtual void UpdateObjectData(bool fSave);
+
+    // Fills the embedded-stream combo from the filter's enumeration of the
+    // current media. Never throws/errors: on failure it shows an empty list and
+    // a note, and logs.
+    void PopulateEmbeddedList();
+    // Writes the option(s) that select the currently chosen embedded entry.
+    void ApplyEmbeddedSelection();
+
+public:
+    CXySubFilterDualPPage(LPUNKNOWN lpunk, HRESULT* phr);
+};
+
+[uuid(DUALSUBS_CLSID_TIMINGPAGE_STR)]
 class CXySubFilterTimingPPage : public CDVSTimingPPage
 {
 public:
     CXySubFilterTimingPPage(LPUNKNOWN lpunk, HRESULT* phr
-        , TCHAR *pName = NAME("XySubFilter Property Page (timing)"))
+        , TCHAR *pName = NAME(DUALSUBS_FILTER_NAME " Property Page (timing)"))
         : CDVSTimingPPage(lpunk, phr, pName) {}
 };
 
-[uuid("26DD9A01-7F95-40DE-B53D-4B4CE4023280")]
+[uuid(DUALSUBS_CLSID_PATHSPAGE_STR)]
 class CXySubFilterPathsPPage : public CDVSPathsPPage
 {
 public:
     CXySubFilterPathsPPage(LPUNKNOWN lpunk, HRESULT* phr
-        , TCHAR* pName = NAME("XySubFilter Property Page (path)"))
+        , TCHAR* pName = NAME(DUALSUBS_FILTER_NAME " Property Page (path)"))
         : CDVSPathsPPage(lpunk, phr, pName) {}
 };
 
-[uuid("D0DE7ADC-7DC6-43EC-912D-ABD44D7453FB")]
+[uuid(DUALSUBS_CLSID_ABOUTPAGE_STR)]
 class CXySubFilterAboutPPage : public CDVSAboutPPage
 {
 public:
-    CXySubFilterAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("XySubFilter Property Page (about)"))
+    CXySubFilterAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME(DUALSUBS_FILTER_NAME " Property Page (about)"))
         : CDVSAboutPPage(lpunk, phr, pName) {}
 };
 
 //
 // XySubFilterConsumer
 //
-[uuid("b7f66b77-10b9-48e4-be40-2e6e4d00292e")]
+[uuid(DUALSUBS_CLSID_CONSUMER_GENERALPAGE_STR)]
 class CXySubFilterConsumerGeneralPPage : public CDVSGeneralPPage
 {
 public:
     CXySubFilterConsumerGeneralPPage(LPUNKNOWN lpunk, HRESULT* phr
-        , TCHAR *pName = NAME("XySubFilterConsumer Property Page (General)"))
+        , TCHAR *pName = NAME(DUALSUBS_FILTER_NAME "Consumer Property Page (General)"))
         : CDVSGeneralPPage(lpunk, phr, pName) {}
 };
 
-[uuid("f2609280-2d03-4251-a1e4-65b1aff9dafe")]
+[uuid(DUALSUBS_CLSID_CONSUMER_MISCPAGE_STR)]
 class CXySubFilterConsumerMiscPPage : public CDVSMiscPPage
 {
 public:
     CXySubFilterConsumerMiscPPage(LPUNKNOWN lpunk, HRESULT* phr
-        , TCHAR *pName = NAME("XySubFilterConsumer Property Page (Misc)"))
+        , TCHAR *pName = NAME(DUALSUBS_FILTER_NAME "Consumer Property Page (Misc)"))
         : CDVSMiscPPage(lpunk, phr, pName) {}
 };
 
-[uuid("2e714223-34bc-430d-b52a-5bd23ddbf049")]
+[uuid(DUALSUBS_CLSID_CONSUMER_COLORPAGE_STR)]
 class CXySubFilterConsumerAboutPPage : public CDVSAboutPPage
 {
 public:
-    CXySubFilterConsumerAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("XySubFilterConsumer Property Page (about)"))
+    CXySubFilterConsumerAboutPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME(DUALSUBS_FILTER_NAME "Consumer Property Page (about)"))
         : CDVSAboutPPage(lpunk, phr, pName) {}
 };
 
-[uuid("c371c901-97eb-4bb4-b742-d53a0eaa7b3c")]
+[uuid(DUALSUBS_CLSID_CONSUMER_ABOUTPAGE_STR)]
 class CXySubFilterConsumerColorPPage : public CDVSColorPPage
 {
 public:
-    CXySubFilterConsumerColorPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME("XySubFilterConsumer Property Page (color)"))
+    CXySubFilterConsumerColorPPage(LPUNKNOWN lpunk, HRESULT* phr, TCHAR* pName=NAME(DUALSUBS_FILTER_NAME "Consumer Property Page (color)"))
         : CDVSColorPPage(lpunk, phr, pName) {}
 };

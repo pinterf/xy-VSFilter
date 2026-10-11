@@ -77,6 +77,11 @@
     <ClCompile Include="GFN.cpp" />
     <ClCompile Include="HdmvSub.cpp" />
     <ClCompile Include="hdmv_subtitle_provider.cpp" />
+
+    <ClCompile Include="TsSubtitleSource.cpp" />
+    <ClCompile Include="MatroskaSubtitleSource.cpp" />
+    <ClCompile Include="EmbeddedStreamEnum.cpp" />
+    <ClCompile Include="EmbeddedStreamPicker.cpp" />
     <ClCompile Include="Rasterizer.cpp">
       <AssemblerOutput>AssemblyAndSourceCode</AssemblerOutput>
     </ClCompile>
@@ -120,6 +125,11 @@
     <ClInclude Include="GFN.h" />
     <ClInclude Include="HdmvSub.h" />
     <ClInclude Include="hdmv_subtitle_provider.h" />
+
+    <ClInclude Include="TsSubtitleSource.h" />
+    <ClInclude Include="MatroskaSubtitleSource.h" />
+    <ClInclude Include="EmbeddedStreamEnum.h" />
+    <ClInclude Include="EmbeddedStreamPicker.h" />
     <ClInclude Include="mru_cache.h" />
     <ClInclude Include="Rasterizer.h" />
     <ClInclude Include="RealTextParser.h" />

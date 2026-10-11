@@ -26,6 +26,7 @@
 #include "DirectVobSubPropPage.h"
 #include "VSFilter.h"
 #include "StyleEditorDialog.h"
+#include "../../../subtitles/EmbeddedStreamPicker.h"
 
 #include "../../../DSUtil/DSUtil.h"
 #include "../../../DSUtil/MediaTypes.h"
@@ -297,6 +298,7 @@ HRESULT CDVSBasePPage::OnConnect(IUnknown* pUnknown)
 {
     if(!(m_pDirectVobSub = pUnknown)) return E_NOINTERFACE;
     if(!(m_pDirectVobSubXy = pUnknown)) return E_NOINTERFACE;
+    m_pTrackLoader = pUnknown;   // optional: not every filter exposes it
 
     m_pDirectVobSub->LockSubtitleReloader(true); // *
 
@@ -320,6 +322,7 @@ HRESULT CDVSBasePPage::OnDisconnect()
     // a second "m_pDirectVobSub->LockSubtitleReloader(false);"
 
     m_pDirectVobSub.Release(); 
+    m_pTrackLoader.Release();
 
     return NOERROR;
 }
@@ -412,6 +415,23 @@ void CDVSBasePPage::DetachControls()
 void CDVSBasePPage::BindControl(UINT id, CWnd& control)
 {
     m_controls[id] = &control;
+}
+
+void CDVSBasePPage::SetEditTextIfChanged(CWnd& wnd, const CString& text)
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+    if (!wnd.GetSafeHwnd())
+    {
+        return;
+    }
+
+    CString current;
+    wnd.GetWindowText(current);
+    if (current != text)
+    {
+        wnd.SetWindowText(text);
+    }
 }
 
 /* CDVSMainPPage */
@@ -1654,7 +1674,7 @@ void CDVSPathsPPage::UpdateControlData(bool fSave)
 // CXySubFilterMainPPage
 //
 CXySubFilterMainPPage::CXySubFilterMainPPage(LPUNKNOWN pUnk, HRESULT* phr) 
-    : CDVSBasePPage(NAME("XySubFilter Property Page (main)"), pUnk, IDD_XY_SUB_FILTER_MAINPAGE, IDD_XY_SUB_FILTER_MAINPAGE)
+    : CDVSBasePPage(NAME(DUALSUBS_FILTER_NAME " Property Page (main)"), pUnk, IDD_XY_SUB_FILTER_MAINPAGE, IDD_XY_SUB_FILTER_MAINPAGE)
     , m_nLangs(0)
     , m_ppLangs(NULL)
 {
@@ -1883,7 +1903,7 @@ void CXySubFilterMainPPage::UpdateControlData(bool fSave)
 // CXySubFilterMorePPage
 //
 CXySubFilterMorePPage::CXySubFilterMorePPage(LPUNKNOWN pUnk, HRESULT* phr) 
-    :CDVSBasePPage(NAME("XySubFilter Property Page (more)"), pUnk
+    :CDVSBasePPage(NAME(DUALSUBS_FILTER_NAME " Property Page (more)"), pUnk
     , IDD_XY_SUB_FILTER_MOREPAGE, IDD_XY_SUB_FILTER_MOREPAGE)
 {
     BindControl(IDC_SPINPathCache, m_path_cache);
@@ -2291,5 +2311,352 @@ void CXySubFilterMorePPage::UpdateControlData(bool fSave)
             cache_size_str.Format(_T("%d"), m_cache_size);
         }
         m_edit_cache_size.SetWindowText(cache_size_str);
+    }
+}
+
+
+//
+// CXySubFilterDualPPage
+//
+CXySubFilterDualPPage::CXySubFilterDualPPage(LPUNKNOWN pUnk, HRESULT* phr)
+    : CDVSBasePPage(NAME(DUALSUBS_FILTER_NAME " Property Page (dual subtitles)"), pUnk
+    , IDD_XY_SUB_FILTER_DUALPAGE, IDD_XY_SUB_FILTER_DUALPAGE)
+    , m_fDualSubEnabled(false)
+    , m_secondaryScale(100)
+    , m_secondaryOpacity(255)
+    , m_secondaryVertical(1)
+    , m_secondaryTopMargin(40)
+    , m_secondaryZOrder(1)
+    , m_primaryVertical(0)
+    , m_embedded_populated(false)
+{
+    BindControl(IDC_DUAL_SUB_ENABLED, m_dual_sub_enabled);
+    BindControl(IDC_SECONDARY_FILE, m_secondary_file);
+    BindControl(IDC_SECONDARY_BROWSE, m_secondary_browse);
+    BindControl(IDC_SECONDARY_SCALE_SPIN, m_secondary_scale);
+    BindControl(IDC_SECONDARY_OPACITY_SPIN, m_secondary_opacity);
+    BindControl(IDC_SECONDARY_TOP_MARGIN_SPIN, m_secondary_top_margin);
+    BindControl(IDC_SECONDARY_Z_ORDER_SPIN, m_secondary_z_order);
+    BindControl(IDC_SECONDARY_VERTICAL, m_secondary_vertical);
+    BindControl(IDC_PRIMARY_VERTICAL, m_primary_vertical);
+    BindControl(IDC_SECONDARY_LANG_LIST, m_secondary_lang_list);
+    BindControl(IDC_SECONDARY_RELOAD, m_secondary_reload);
+    BindControl(IDC_SECONDARY_EMBEDDED_LIST, m_secondary_embedded_list);
+    BindControl(IDC_SECONDARY_EMBEDDED_REFRESH, m_secondary_embedded_refresh);
+    BindControl(IDC_SECONDARY_EMBEDDED_NOTE, m_secondary_embedded_note);
+}
+
+bool CXySubFilterDualPPage::OnMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
+{
+    switch(uMsg)
+    {
+    case WM_COMMAND:
+        {
+            switch(HIWORD(wParam))
+            {
+            case BN_CLICKED:
+                {
+                    if(LOWORD(wParam) == IDC_SECONDARY_BROWSE)
+                    {
+                        AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+                        CFileDialog fd(TRUE, NULL, NULL,
+                            OFN_EXPLORER|OFN_ENABLESIZING|OFN_HIDEREADONLY|OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST,
+                            _T(".idx .smi .sub .srt .psb .ssa .ass .usf .ssf .sup .vtt|*.idx;*.smi;*.sub;*.srt;*.psb;*.ssa;*.ass;*.usf;*.ssf;*.sup;*.vtt|")
+                            _T("All files (*.*)|*.*||"),
+                            CDialog::FromHandle(m_Dlg), 0);
+
+                        if(fd.DoModal() == IDOK)
+                        {
+                            // Append to the multi-entry list form when some
+                            // entries are already present, so Browse never
+                            // clobbers an existing list.
+                            CString cur;
+                            m_secondary_file.GetWindowText(cur);
+                            cur.Trim();
+                            CString path = fd.GetPathName();
+                            if(cur.IsEmpty())
+                            {
+                                m_secondary_file.SetWindowText(path);
+                            }
+                            else if(cur.Find(path) < 0)
+                            {
+                                m_secondary_file.SetWindowText(cur + _T(";") + path);
+                            }
+                        }
+
+                        return(true);
+                    }
+                    else if(LOWORD(wParam) == IDC_SECONDARY_RELOAD)
+                    {
+                        // Force the filter to rebuild its track set from the
+                        // current option values (the fields were pushed by the
+                        // instant-apply path already when enabled).
+                        AFX_MANAGE_STATE(AfxGetStaticModuleState());
+                        if(m_pDirectVobSubXy)
+                        {
+                            // Re-writing the same value is a no-op in the option
+                            // layer, so nudge through enable/disable which always
+                            // triggers a multi-tracker rebuild.
+                            bool en = !!m_dual_sub_enabled.GetCheck();
+                            m_pDirectVobSubXy->XySetBool(DirectVobSubXyOptions::BOOL_DUAL_SUB_ENABLED, !en);
+                            m_pDirectVobSubXy->XySetBool(DirectVobSubXyOptions::BOOL_DUAL_SUB_ENABLED, en);
+                        }
+                        return(true);
+                    }
+                    else if(LOWORD(wParam) == IDC_SECONDARY_EMBEDDED_REFRESH)
+                    {
+                        PopulateEmbeddedList();
+                        return(true);
+                    }
+                }
+                break;
+            case CBN_SELCHANGE:
+                if(LOWORD(wParam) == IDC_SECONDARY_EMBEDDED_LIST)
+                {
+                    ApplyEmbeddedSelection();
+                    return(true);
+                }
+                break;
+            }
+        }
+        break;
+    }
+
+    return(false);
+}
+
+// Turns one embedded stream into the token form the option grammar accepts,
+// the option value that selects it, and the reverse lookup are shared with the
+// standalone test in src/subtitles/EmbeddedStreamPicker.{h,cpp}.
+
+void CXySubFilterDualPPage::PopulateEmbeddedList()
+{
+    AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+    m_embedded_streams.clear();
+    m_secondary_embedded_list.ResetContent();
+
+    CString note = _T("(no media / no embedded streams)");
+    if (m_pTrackLoader == NULL)
+    {
+        note = _T("Embedded enumeration not available for this filter.");
+    }
+    else
+    {
+        // NULL media path: the filter enumerates the current graph's media.
+        // Failure is reported as an empty list, never as a UI error.
+        HRESULT hr = m_pTrackLoader->EnumerateEmbeddedStreams(NULL, &m_embedded_streams);
+        if (FAILED(hr))
+        {
+            XY_LOG_WARN("Embedded enumeration failed "<<XY_LOG_VAR_2_STR(hr));
+            m_embedded_streams.clear();
+            note = _T("Embedded enumeration failed (see log).");
+        }
+        else if (m_embedded_streams.empty())
+        {
+            note = (hr == S_FALSE)
+                ? _T("No current media: open a file with embedded subtitles.")
+                : _T("No embedded subtitle streams found in the current media.");
+        }
+        else
+        {
+            note = _T("Pick an embedded stream to select it (updates the value above).");
+        }
+    }
+
+    for (size_t i = 0; i < m_embedded_streams.size(); i++)
+    {
+        const EmbeddedStreamInfo& s = m_embedded_streams[i];
+        CString extra;
+        if (!s.label.empty())
+        {
+            extra = _T("  ");
+            extra += s.label.c_str();
+        }
+        CString label;
+        label.Format(_T("%u. %s [%hs]%s"), (unsigned)s.index,
+            (LPCTSTR)EmbeddedStreamToken(s), s.codec_name.c_str(),
+            (LPCTSTR)extra);
+        int item = m_secondary_embedded_list.AddString(label);
+        m_secondary_embedded_list.SetItemData(item, (DWORD_PTR)i);
+    }
+
+    SetEditTextIfChanged(m_secondary_embedded_note, note);
+
+    // Reflect the currently configured selection, when it resolves to a listed
+    // entry, so the combo starts on the active stream rather than blank. A TS
+    // selection may be recorded either in the dedicated PID option or as a
+    // 'pid:0xNNNN' entry in the text list.
+    CString curText = m_secondaryFile;
+    if (m_secondary_file.GetSafeHwnd())
+    {
+        m_secondary_file.GetWindowText(curText);   // live text (Refresh path)
+    }
+    int cur_pid = 0;
+    if (m_pDirectVobSubXy)
+    {
+        m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_SECONDARY_EMBEDDED_PID, &cur_pid);
+    }
+    int match = FindSelectedEmbeddedStream(m_embedded_streams, curText, cur_pid);
+    if (match >= 0)
+    {
+        m_secondary_embedded_list.SetCurSel(match);
+    }
+}
+
+void CXySubFilterDualPPage::ApplyEmbeddedSelection()
+{
+    int sel = m_secondary_embedded_list.GetCurSel();
+    if (sel == CB_ERR)
+    {
+        return;
+    }
+    DWORD_PTR idx = m_secondary_embedded_list.GetItemData(sel);
+    if (m_pDirectVobSubXy == NULL || idx >= m_embedded_streams.size())
+    {
+        return;
+    }
+
+    const EmbeddedStreamInfo& s = m_embedded_streams[idx];
+    CString token = EmbeddedStreamToken(s);
+
+    // The text field is the option that drives selection (a list of secondaries);
+    // replace any previous embedded entry so the picker does not stack streams.
+    CString cur;
+    m_secondary_file.GetWindowText(cur);
+    CString base = StripEmbeddedEntries(cur);
+    CString combined = base.IsEmpty() ? token : (base + _T(";") + token);
+
+    m_secondaryFile = combined;
+    SetEditTextIfChanged(m_secondary_file, combined);
+    m_pDirectVobSubXy->XySetString(DirectVobSubXyOptions::STRING_FILE_NAME_SECONDARY,
+        (LPWSTR)(LPCWSTR)combined, combined.GetLength());
+
+    // TS/BDMV additionally records the raw PID in the dedicated option, exactly
+    // as the existing grammar does; Matroska has no PID, so clear it.
+    m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_SECONDARY_EMBEDDED_PID,
+        EmbeddedStreamOptionPid(s));
+}
+
+void CXySubFilterDualPPage::UpdateObjectData(bool fSave)
+{
+    HRESULT hr = NOERROR;
+    if(fSave)
+    {
+        hr = m_pDirectVobSubXy->XySetString(DirectVobSubXyOptions::STRING_FILE_NAME_SECONDARY
+            , (LPWSTR)(LPCWSTR)m_secondaryFile, m_secondaryFile.GetLength());
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetBool(DirectVobSubXyOptions::BOOL_DUAL_SUB_ENABLED, m_fDualSubEnabled);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_SECONDARY_SCALE, m_secondaryScale);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_SECONDARY_OPACITY, m_secondaryOpacity);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_SECONDARY_VERTICAL, m_secondaryVertical);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_SECONDARY_TOP_MARGIN, m_secondaryTopMargin);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_SECONDARY_Z_ORDER, m_secondaryZOrder);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetInt(DirectVobSubXyOptions::INT_PRIMARY_VERTICAL, m_primaryVertical);
+        CHECK_N_LOG(hr, "Failed to set option");
+        hr = m_pDirectVobSubXy->XySetString(DirectVobSubXyOptions::STRING_SECONDARY_LANGUAGE_LIST
+            , (LPWSTR)(LPCWSTR)m_secondaryLanguageList, m_secondaryLanguageList.GetLength());
+        CHECK_N_LOG(hr, "Failed to set option");
+    }
+    else
+    {
+        LPWSTR tmp = NULL;
+        int chars = 0;
+        hr = m_pDirectVobSubXy->XyGetString(DirectVobSubXyOptions::STRING_FILE_NAME_SECONDARY, &tmp, &chars);
+        CHECK_N_LOG(hr, "Failed to get option");
+        m_secondaryFile = CString(tmp ? tmp : L"", tmp ? chars : 0);
+        LocalFree(tmp);
+
+        hr = m_pDirectVobSubXy->XyGetBool(DirectVobSubXyOptions::BOOL_DUAL_SUB_ENABLED, &m_fDualSubEnabled);
+        CHECK_N_LOG(hr, "Failed to get option");
+        hr = m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_SECONDARY_SCALE, &m_secondaryScale);
+        CHECK_N_LOG(hr, "Failed to get option");
+        hr = m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_SECONDARY_OPACITY, &m_secondaryOpacity);
+        CHECK_N_LOG(hr, "Failed to get option");
+        hr = m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_SECONDARY_VERTICAL, &m_secondaryVertical);
+        CHECK_N_LOG(hr, "Failed to get option");
+        hr = m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_SECONDARY_TOP_MARGIN, &m_secondaryTopMargin);
+        CHECK_N_LOG(hr, "Failed to get option");
+        hr = m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_SECONDARY_Z_ORDER, &m_secondaryZOrder);
+        CHECK_N_LOG(hr, "Failed to get option");
+        hr = m_pDirectVobSubXy->XyGetInt(DirectVobSubXyOptions::INT_PRIMARY_VERTICAL, &m_primaryVertical);
+        CHECK_N_LOG(hr, "Failed to get option");
+
+        tmp = NULL; chars = 0;
+        hr = m_pDirectVobSubXy->XyGetString(DirectVobSubXyOptions::STRING_SECONDARY_LANGUAGE_LIST, &tmp, &chars);
+        CHECK_N_LOG(hr, "Failed to get option");
+        m_secondaryLanguageList = CString(tmp ? tmp : L"", tmp ? chars : 0);
+        LocalFree(tmp);
+    }
+}
+
+void CXySubFilterDualPPage::UpdateControlData(bool fSave)
+{
+    if(fSave)
+    {
+        CString fn;
+        m_secondary_file.GetWindowText(fn);
+        m_secondaryFile = fn;
+
+        m_fDualSubEnabled = !!m_dual_sub_enabled.GetCheck();
+        m_secondaryScale = m_secondary_scale.GetPos32();
+        m_secondaryOpacity = m_secondary_opacity.GetPos32();
+        m_secondaryTopMargin = m_secondary_top_margin.GetPos32();
+        m_secondaryZOrder = m_secondary_z_order.GetPos32();
+        if (m_secondary_vertical.GetCurSel() != CB_ERR)
+            m_secondaryVertical = m_secondary_vertical.GetItemData(m_secondary_vertical.GetCurSel());
+        else
+            m_secondaryVertical = 0;
+        if (m_primary_vertical.GetCurSel() != CB_ERR)
+            m_primaryVertical = m_primary_vertical.GetItemData(m_primary_vertical.GetCurSel());
+        else
+            m_primaryVertical = 0;
+
+        CString lang;
+        m_secondary_lang_list.GetWindowText(lang);
+        m_secondaryLanguageList = lang;
+    }
+    else
+    {
+        m_dual_sub_enabled.SetCheck(m_fDualSubEnabled);
+        SetEditTextIfChanged(m_secondary_file, m_secondaryFile);
+
+        m_secondary_scale.SetRange32(1, 1000);
+        m_secondary_scale.SetPos32(m_secondaryScale);
+        m_secondary_opacity.SetRange32(0, 255);
+        m_secondary_opacity.SetPos32(m_secondaryOpacity);
+        m_secondary_top_margin.SetRange32(0, 4096);
+        m_secondary_top_margin.SetPos32(m_secondaryTopMargin);
+        m_secondary_z_order.SetRange32(-64, 64);
+        m_secondary_z_order.SetPos32(m_secondaryZOrder);
+
+        m_secondary_vertical.ResetContent();
+        m_secondary_vertical.AddString(_T("As-is")); m_secondary_vertical.SetItemData(0, 0);
+        m_secondary_vertical.AddString(_T("Top"));   m_secondary_vertical.SetItemData(1, 1);
+        m_secondary_vertical.AddString(_T("Bottom"));m_secondary_vertical.SetItemData(2, 2);
+        m_secondary_vertical.SetCurSel(m_secondaryVertical >= 0 && m_secondaryVertical <= 2 ? m_secondaryVertical : 0);
+
+        m_primary_vertical.ResetContent();
+        m_primary_vertical.AddString(_T("As-is")); m_primary_vertical.SetItemData(0, 0);
+        m_primary_vertical.AddString(_T("Top"));   m_primary_vertical.SetItemData(1, 1);
+        m_primary_vertical.AddString(_T("Bottom"));m_primary_vertical.SetItemData(2, 2);
+        m_primary_vertical.SetCurSel(m_primaryVertical >= 0 && m_primaryVertical <= 2 ? m_primaryVertical : 0);
+
+        SetEditTextIfChanged(m_secondary_lang_list, m_secondaryLanguageList);
+
+        // First display only: enumerate the current media's embedded streams.
+        // Later instant-applies keep the list (and the user's caret/selection).
+        if (!m_embedded_populated && m_secondary_embedded_list.GetSafeHwnd())
+        {
+            m_embedded_populated = true;
+            PopulateEmbeddedList();
+        }
     }
 }

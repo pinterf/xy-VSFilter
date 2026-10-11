@@ -1,4 +1,4 @@
-Microsoft Visual Studio Solution File, Format Version 11.00
+﻿Microsoft Visual Studio Solution File, Format Version 11.00
 # Visual Studio 2010
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "subtitles", "src\subtitles\subtitles.vcxproj", "{5E56335F-0FB1-4EEA-B240-D8DC5E0608E4}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -43,6 +43,27 @@ EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "system", "src\thirdparty\VirtualDub\system\system.vcxproj", "{C2082189-3ECB-4079-91FA-89D3C8A305C0}"
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "unrar", "src\thirdparty\unrar\unrar.vcxproj", "{DA8461C4-7683-4360-9372-2A9E0F1795C2}"
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "composite_frame_test", "test\composite_frame_test.vcxproj", "{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}"
+	ProjectSection(ProjectDependencies) = postProject
+		{D514EA4D-EAFB-47A9-A437-A582CA571251} = {D514EA4D-EAFB-47A9-A437-A582CA571251}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "ts_demux_test", "test\ts_demux_test.vcxproj", "{0192264E-58C1-4A09-9CA1-F69E5B138D11}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5E56335F-0FB1-4EEA-B240-D8DC5E0608E4} = {5E56335F-0FB1-4EEA-B240-D8DC5E0608E4}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "mkv_demux_test", "test\mkv_demux_test.vcxproj", "{46885658-00CA-4BF1-AB52-505AC1D64793}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5E56335F-0FB1-4EEA-B240-D8DC5E0608E4} = {5E56335F-0FB1-4EEA-B240-D8DC5E0608E4}
+	EndProjectSection
+EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "embedded_enum_test", "test\embedded_enum_test.vcxproj", "{24FC3CA4-12D2-4DF6-9159-BE39110BB366}"
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "embedded_iface_probe", "test\embedded_iface_probe.vcxproj", "{93DA8184-8592-4941-8BDB-DF1D1CE7AB88}"
+	ProjectSection(ProjectDependencies) = postProject
+		{5E56335F-0FB1-4EEA-B240-D8DC5E0608E4} = {5E56335F-0FB1-4EEA-B240-D8DC5E0608E4}
+	EndProjectSection
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "xy_sub_filter", "src\filters\transform\vsfilter\xy_sub_filter.vcxproj", "{9ED0FE7D-079D-4777-A40F-EF9189BDDD61}"
 	ProjectSection(ProjectDependencies) = postProject
@@ -194,6 +215,40 @@ Global
 		{DA8461C4-7683-4360-9372-2A9E0F1795C2}.Release|Win32.Build.0 = Release|Win32
 		{DA8461C4-7683-4360-9372-2A9E0F1795C2}.Release|x64.ActiveCfg = Release|x64
 		{DA8461C4-7683-4360-9372-2A9E0F1795C2}.Release|x64.Build.0 = Release|x64
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Debug|Win32.ActiveCfg = Debug|Win32
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Debug|Win32.Build.0 = Debug|Win32
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Debug|x64.ActiveCfg = Debug|x64
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Debug|x64.Build.0 = Debug|x64
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Release|Win32.ActiveCfg = Release|Win32
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Release|Win32.Build.0 = Release|Win32
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Release|x64.ActiveCfg = Release|x64
+		{FF299ED1-8A8B-4015-9F82-1ABD7F9F51A0}.Release|x64.Build.0 = Release|x64
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Debug|Win32.ActiveCfg = Debug|Win32
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Debug|Win32.Build.0 = Debug|Win32
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Debug|x64.ActiveCfg = Debug|x64
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Debug|x64.Build.0 = Debug|x64
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Release|Win32.ActiveCfg = Release|Win32
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Release|Win32.Build.0 = Release|Win32
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Release|x64.ActiveCfg = Release|x64
+		{0192264E-58C1-4A09-9CA1-F69E5B138D11}.Release|x64.Build.0 = Release|x64
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Debug|Win32.ActiveCfg = Debug|Win32
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Debug|Win32.Build.0 = Debug|Win32
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Debug|x64.ActiveCfg = Debug|x64
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Debug|x64.Build.0 = Debug|x64
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Release|Win32.ActiveCfg = Release|Win32
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Release|Win32.Build.0 = Release|Win32
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Release|x64.ActiveCfg = Release|x64
+		{46885658-00CA-4BF1-AB52-505AC1D64793}.Release|x64.Build.0 = Release|x64
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Debug|Win32.ActiveCfg = Debug|Win32
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Debug|Win32.Build.0 = Debug|Win32
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Debug|x64.ActiveCfg = Debug|x64
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Debug|x64.Build.0 = Debug|x64
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Release|Win32.ActiveCfg = Release|Win32
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Release|Win32.Build.0 = Release|Win32
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Release|x64.ActiveCfg = Release|x64
+		{24FC3CA4-12D2-4DF6-9159-BE39110BB366}.Release|x64.Build.0 = Release|x64
+		{93DA8184-8592-4941-8BDB-DF1D1CE7AB88}.Release|x64.ActiveCfg = Release|x64
+		{93DA8184-8592-4941-8BDB-DF1D1CE7AB88}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,11 +1,15 @@
 #pragma once
 
+#include "dualsubs_identity.h"
+
 #include <atlsync.h>
 #include "DirectVobSub.h"
 #include "SubRenderIntf.h"
 #include "SubRenderOptionsImpl.h"
+#include "IMultiSubtitleTrackLoader.h"
 
 class CDirectVobSubFilter;
+class MultiTrackSubRenderProvider;
 
 // Expose this interface if you do NOT want to work with XySubFilter in a graph
 [uuid("8871ac83-89c8-44e9-913f-a9a2a322440a")]
@@ -14,7 +18,7 @@ interface IXySubFilterGraphMutex : public IUnknown
 
 };
 
-[uuid("2dfcb782-ec20-4a7c-b530-4577adb33f21")]
+[uuid(DUALSUBS_CLSID_FILTER_STR)]
 class XySubFilter
     : public CBaseFilter
     , public CDVS4XySubFilter
@@ -24,6 +28,7 @@ class XySubFilter
     , public SubRenderOptionsImpl
     , public ISubRenderProvider
     , public IXySubFilterGraphMutex
+    , public IMultiSubtitleTrackLoader
 {
 public:
     friend class SubtitleInputPin2;
@@ -78,6 +83,21 @@ public:
     //ISubRenderProvider
     STDMETHODIMP RequestFrame(REFERENCE_TIME start, REFERENCE_TIME stop, LPVOID context);
     STDMETHODIMP Disconnect(void);
+
+    // IMultiSubtitleTrackLoader: builds a subtitle source from an external file,
+    // reusing the default loader cascade (RTS / VobSub / SSF / SUP).
+    STDMETHODIMP CreateTrackProviderFromFile(LPCWSTR file_path, IXySubRenderProvider** provider);
+
+    // Reads an embedded subtitle stream straight from the container file; the
+    // container-side counterpart of CreateTrackProviderFromFile. Dispatches to
+    // the TS/BDMV or Matroska source by container type.
+    STDMETHODIMP CreateTrackProviderFromEmbedded(LPCWSTR media_path, WORD value,
+        EmbeddedSelectKind kind, IXySubRenderProvider** provider);
+
+    // Lists the embedded subtitle streams of the current media (TS/BDMV or
+    // Matroska) for the property page's pickable list. Container headers only.
+    STDMETHODIMP EnumerateEmbeddedStreams(LPCWSTR media_path,
+        std::vector<EmbeddedStreamInfo>* out);
 private:
     void SetYuvMatrix();
     void SetRgbOutputLevel();
@@ -101,10 +121,31 @@ private:
 
     bool LoadExternalSubtitle(IFilterGraph* pGraph);
 
+    // Independent secondary auto-load: when the language list is configured,
+    // find a subtitle next to the media whose suffix matches and use it as the
+    // secondary track. No-op (stock behaviour) when the list is empty.
+    bool LoadSecondarySubtitle(IFilterGraph* pGraph);
+
+    // Records the media file path (IFileSourceFilter enumeration), used by the
+    // container-side (embedded) secondary source.
+    void UpdateMediaFileName(IFilterGraph* pGraph);
+
+    // Wrap pPrimary (mandatory) + optional secondary into the multi-tracker.
+    void UpdateMultiTracker(ISubRenderProvider* pPrimary);
+
     HRESULT GetRidOfVSFilter();
     HRESULT StartStreaming();
 
     HRESULT FindAndConnectConsumer(IFilterGraph* pGraph);
+
+    // Fail-soft guard used right before we take exclusive use of the subtitle
+    // consumer: returns true when another filter in the graph exposes
+    // IXySubFilterGraphMutex, i.e. an Xy-family subtitle filter (the upstream
+    // XySubFilter or another instance of this fork). The enumeration skips
+    // ourselves, is non-recursive and stops at the first match. On a match,
+    // "who" (optional) receives a human readable identifier: the filter name,
+    // or its class id when the filter has no name yet.
+    bool IsAnotherXySubFilterActive(IFilterGraph* pGraph, CString* who);
 
     void UpdateLanguageCount();
 
@@ -129,6 +170,10 @@ private:
     CInterfaceList<ISubStream> m_pSubStreams;
     CAtlList<bool> m_fIsSubStreamEmbeded;
 
+    // Media (container) path used by the container-side embedded secondary
+    // source; empty until the graph is enumerated.
+    CStringW m_media_file_path;
+
     // critical section protecting all
     CCritSec m_csFilter;
 
@@ -139,6 +184,7 @@ private:
     CCritSec m_csConsumer;      // critical section protecting m_consumer
 
     CComPtr<IXySubRenderProvider> m_sub_provider;
+    CComPtr<MultiTrackSubRenderProvider> m_multi_tracker;
 
     CAtlArray<SubtitleInputPin2*> m_pSubtitleInputPin;
 
@@ -158,6 +204,11 @@ private:
     bool m_workaround_mpc_hc;//enable workaround for MPC-HC to prevent be removed from the graph
 
     bool m_disconnect_entered;
+
+    // Set by the coexistence guard in FindAndConnectConsumer when we declined
+    // to connect because another Xy-family filter is active; lets Pause() tell
+    // an intentional stand-down apart from a real connect failure.
+    bool m_stood_down_owing_to_other_xy;
 
     CStringW m_filter_info_string;
 
